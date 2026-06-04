@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 from pathlib import Path
 
@@ -12,7 +13,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from qalf.data import build_tokenizer, encode_examples, make_windows, read_jsonl, relation_counts, trigram_counts
 from qalf.joblog import JobLogger
-from qalf.model import QALFConfig, QALFModel, cross_entropy_with_l2, device_for_training, save_checkpoint
+from qalf.model import QALFConfig, QALFModel, cross_entropy_with_l2, device_for_training, load_checkpoint, save_checkpoint
 
 
 def parse_args() -> argparse.Namespace:
@@ -35,7 +36,36 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trigram-top-k", type=int, default=32)
     parser.add_argument("--trigram-min-count", type=int, default=2)
     parser.add_argument("--trigram-strength", type=float, default=0.75)
+    parser.add_argument("--resume", default=None, help="Resume from a QALF checkpoint with training_state")
+    parser.add_argument("--save-every", type=int, default=0, help="Save checkpoint_epoch_N.pt every N epochs")
+    parser.add_argument("--lr-schedule", choices=["constant", "warmup-cosine"], default="constant")
+    parser.add_argument("--warmup-fraction", type=float, default=0.03)
+    parser.add_argument("--min-lr-ratio", type=float, default=0.1)
     return parser.parse_args()
+
+
+def scheduled_lr(
+    base_lr: float,
+    global_step: int,
+    total_steps: int,
+    schedule: str,
+    warmup_fraction: float,
+    min_lr_ratio: float,
+) -> float:
+    if schedule == "constant" or total_steps <= 1:
+        return base_lr
+    warmup_steps = max(1, int(total_steps * max(warmup_fraction, 0.0)))
+    min_lr = base_lr * min_lr_ratio
+    if global_step < warmup_steps:
+        return base_lr * float(global_step + 1) / float(warmup_steps)
+    progress = min(1.0, (global_step - warmup_steps) / max(total_steps - warmup_steps, 1))
+    cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+    return min_lr + (base_lr - min_lr) * cosine
+
+
+def set_optimizer_lr(optimizer: torch.optim.Optimizer, lr: float) -> None:
+    for group in optimizer.param_groups:
+        group["lr"] = lr
 
 
 def main() -> None:
@@ -45,10 +75,29 @@ def main() -> None:
     logger = JobLogger(args.log_file)
     examples = read_jsonl(args.data)
     logger.emit({"stage": "read_data", "examples": len(examples), "data": args.data})
-    tokenizer = build_tokenizer(examples, vocab_size=args.vocab_size)
-    logger.emit({"stage": "build_tokenizer", "vocab": len(tokenizer.vocab)})
+    resumed_payload = None
+    resumed_metadata = {}
+    resumed_training_state = {}
+    if args.resume:
+        resumed_payload = torch.load(args.resume, map_location="cpu", weights_only=False)
+        model, tokenizer, resumed_metadata = load_checkpoint(args.resume, map_location="cpu")
+        resumed_training_state = resumed_payload.get("training_state", {})
+        config = model.config
+        logger.emit({"stage": "resume_checkpoint", "checkpoint": args.resume, "start_epoch": int(resumed_training_state.get("epoch", 0)) + 1, "vocab": len(tokenizer.vocab)})
+    else:
+        tokenizer = build_tokenizer(examples, vocab_size=args.vocab_size)
+        config = QALFConfig(
+            vocab_size=len(tokenizer.vocab),
+            dimension=args.dimension,
+            context_size=args.context_size,
+            num_relations=args.relations,
+            trigram_strength=args.trigram_strength,
+            pad_id=tokenizer.pad_id,
+        )
+        model = None
+        logger.emit({"stage": "build_tokenizer", "vocab": len(tokenizer.vocab)})
     encoded = encode_examples(tokenizer, examples)
-    contexts, prev2_tokens, prev_tokens, targets = make_windows(encoded, args.context_size, tokenizer.pad_id, include_prev2=True)
+    contexts, prev2_tokens, prev_tokens, targets = make_windows(encoded, config.context_size, tokenizer.pad_id, include_prev2=True)
     if args.max_windows is not None and args.max_windows < targets.numel():
         order = torch.randperm(targets.numel())[: args.max_windows]
         contexts = contexts[order]
@@ -56,28 +105,38 @@ def main() -> None:
         prev_tokens = prev_tokens[order]
         targets = targets[order]
     window_ram_gb = (contexts.numel() + prev2_tokens.numel() + prev_tokens.numel() + targets.numel()) * contexts.element_size() / (1024 ** 3)
-    logger.emit({"stage": "make_windows", "windows": int(targets.numel()), "context_size": args.context_size, "window_tensor_gb": window_ram_gb})
+    logger.emit({"stage": "make_windows", "windows": int(targets.numel()), "context_size": config.context_size, "window_tensor_gb": window_ram_gb})
     bigram = relation_counts(encoded, len(tokenizer.vocab))
     trigram = trigram_counts(encoded, len(tokenizer.vocab), top_k=args.trigram_top_k, min_count=args.trigram_min_count)
     bigram_gb = bigram.numel() * bigram.element_size() / (1024 ** 3)
     trigram_gb = sum(t.numel() * t.element_size() for t in trigram.values()) / (1024 ** 3)
     logger.emit({"stage": "build_higher_order_memory", "trigram_contexts": int(trigram["keys"].numel()), "trigram_top_k": args.trigram_top_k, "bigram_gb": bigram_gb, "trigram_gb": trigram_gb})
-    config = QALFConfig(
-        vocab_size=len(tokenizer.vocab),
-        dimension=args.dimension,
-        context_size=args.context_size,
-        num_relations=args.relations,
-        trigram_strength=args.trigram_strength,
-        pad_id=tokenizer.pad_id,
-    )
     device = device_for_training(args.device)
-    logger.emit({"stage": "init_model", "device": str(device), "dimension": args.dimension, "relations": args.relations})
-    model = QALFModel(config, bigram_logits=bigram, trigram_prior=trigram).to(device)
+    logger.emit({"stage": "init_model", "device": str(device), "dimension": config.dimension, "relations": config.num_relations})
+    if model is None:
+        model = QALFModel(config, bigram_logits=bigram, trigram_prior=trigram)
+    else:
+        model.bigram_logits = bigram
+        model.trigram_keys = trigram["keys"]
+        model.trigram_token_ids = trigram["token_ids"]
+        model.trigram_token_logits = trigram["token_logits"]
+    model = model.to(device)
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
     dataset = TensorDataset(contexts, prev2_tokens, prev_tokens, targets)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    history: list[dict[str, float]] = []
-    for epoch in range(1, args.epochs + 1):
+    if resumed_training_state.get("optimizer_state"):
+        optimizer.load_state_dict(resumed_training_state["optimizer_state"])
+        for group in optimizer.param_groups:
+            group["lr"] = args.lr
+    start_epoch = int(resumed_training_state.get("epoch", 0)) + 1
+    steps_per_epoch = len(loader)
+    total_steps = max(steps_per_epoch * args.epochs, 1)
+    global_step = int(resumed_training_state.get("global_step", max(start_epoch - 1, 0) * steps_per_epoch))
+    logger.emit({"stage": "lr_schedule", "schedule": args.lr_schedule, "base_lr": args.lr, "warmup_fraction": args.warmup_fraction, "min_lr_ratio": args.min_lr_ratio, "start_global_step": global_step, "total_steps": total_steps, "steps_per_epoch": steps_per_epoch})
+    history: list[dict[str, float]] = list(resumed_metadata.get("history", []))
+    for epoch in range(start_epoch, args.epochs + 1):
         total_loss = 0.0
         seen = 0
         for batch_contexts, batch_prev2, batch_prev, batch_targets in loader:
@@ -85,22 +144,34 @@ def main() -> None:
             batch_prev2 = batch_prev2.to(device)
             batch_prev = batch_prev.to(device)
             batch_targets = batch_targets.to(device)
+            lr_now = scheduled_lr(args.lr, global_step, total_steps, args.lr_schedule, args.warmup_fraction, args.min_lr_ratio)
+            set_optimizer_lr(optimizer, lr_now)
             optimizer.zero_grad(set_to_none=True)
             logits = model(batch_contexts, batch_prev, batch_prev2)
             loss = cross_entropy_with_l2(model, logits, batch_targets)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            global_step += 1
             total_loss += float(loss.detach().cpu()) * batch_targets.numel()
             seen += batch_targets.numel()
         avg_loss = total_loss / max(seen, 1)
         if epoch == 1 or epoch % args.log_every == 0 or epoch == args.epochs:
             diag_contexts = contexts[: min(16, len(contexts))].to(device)
             diag = model.diagnostics(diag_contexts)
-            record = {"epoch": epoch, "loss": avg_loss, **diag}
+            record = {"epoch": epoch, "loss": avg_loss, "lr": optimizer.param_groups[0]["lr"], "global_step": global_step, **diag}
             history.append(record)
             logger.emit(record)
-    out_dir = Path(args.out)
+        if args.save_every and epoch % args.save_every == 0:
+            save_checkpoint(
+                out_dir / f"checkpoint_epoch_{epoch}.pt",
+                model.cpu(),
+                tokenizer,
+                metadata={"data": args.data, "device": str(device), "epochs": args.epochs, "examples": len(examples), "windows": int(targets.numel()), "history": history},
+                training_state={"epoch": epoch, "global_step": global_step, "optimizer_state": optimizer.state_dict()},
+            )
+            model.to(device)
+            logger.emit({"stage": "checkpoint", "epoch": epoch, "checkpoint": str(out_dir / f"checkpoint_epoch_{epoch}.pt")})
     metadata = {
         "data": args.data,
         "device": str(device),
@@ -114,7 +185,7 @@ def main() -> None:
         "windows": int(targets.numel()),
         "history": history,
     }
-    save_checkpoint(out_dir / "model.pt", model.cpu(), tokenizer, metadata)
+    save_checkpoint(out_dir / "model.pt", model.cpu(), tokenizer, metadata, training_state={"epoch": args.epochs, "global_step": global_step, "optimizer_state": optimizer.state_dict()})
     logger.emit({"stage": "saved", "checkpoint": str(out_dir / "model.pt")})
     logger.close()
 

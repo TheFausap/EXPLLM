@@ -219,6 +219,7 @@ def save_checkpoint(
     model: QALFModel,
     tokenizer: QuantumTokenizer,
     metadata: dict[str, Any] | None = None,
+    training_state: dict[str, Any] | None = None,
 ) -> None:
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -227,6 +228,7 @@ def save_checkpoint(
         "model_state": model.state_dict(),
         "vocab": tokenizer.vocab,
         "metadata": metadata or {},
+        "training_state": training_state or {},
     }
     torch.save(payload, path)
     with (path.parent / "metadata.json").open("w", encoding="utf-8") as handle:

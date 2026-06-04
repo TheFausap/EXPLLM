@@ -119,7 +119,10 @@ conda run -n EXPLLM python -m qalf.train \
   --vocab-size 32000 \
   --epochs 30 \
   --batch-size 1024 \
-  --lr 0.004 \
+  --lr 0.008 \
+  --lr-schedule warmup-cosine \
+  --warmup-fraction 0.03 \
+  --min-lr-ratio 0.15 \
   --max-windows 5000000 \
   --relations 12 \
   --trigram-top-k 96 \
@@ -145,3 +148,57 @@ Python overhead is now reduced by preallocating tensors directly. The dense
 bigram prior at vocab 32k is about 4 GiB. This should still leave plenty of room
 on a 128 GB DGX Spark. If memory remains low and training is stable, raise
 `--max-windows` to `10000000`, then raise `--dimension` to `512`.
+
+## Resuming Training
+
+Training now supports periodic resumable checkpoints. Add `--save-every N` to a
+long run; this writes `checkpoint_epoch_N.pt` files containing model weights,
+optimizer state, and the completed epoch. Final `model.pt` also includes training
+state.
+
+Example long run options:
+
+```bash
+--save-every 2 \
+--log-file runs/qalf_dgx_heavy/train.jsonl
+```
+
+Resume from the latest checkpoint and set `--epochs` to the final target epoch,
+not the number of additional epochs:
+
+```bash
+conda run -n EXPLLM python -m qalf.train \
+  --data data/tinystories_train_100k_qalf.jsonl \
+  --out runs/qalf_dgx_heavy \
+  --resume runs/qalf_dgx_heavy/checkpoint_epoch_10.pt \
+  --device cuda \
+  --epochs 30 \
+  --batch-size 1024 \
+  --lr 0.004 \
+  --save-every 2 \
+  --log-file runs/qalf_dgx_heavy/train_resume.jsonl
+```
+
+If a run was started without `--save-every`, it can resume only after final
+`model.pt` has been written. An interrupted run with no checkpoint cannot be
+resumed.
+
+## Learning Rate Scheduling
+
+Training defaults to a static learning rate for compatibility, but long DGX runs
+should use warmup plus cosine decay. The schedule is step-based, logs `lr` at
+each epoch record, and stores `global_step` in checkpoints for resume.
+
+Recommended starting point for the heavy run:
+
+```bash
+--lr 0.008 \
+--lr-schedule warmup-cosine \
+--warmup-fraction 0.03 \
+--min-lr-ratio 0.15
+```
+
+If the first two epochs are unstable or loss spikes, lower `--lr` to `0.006`.
+If the loss still plateaus early and VRAM is healthy, try `--batch-size 2048`
+with `--lr 0.01`. For exact resume behavior, keep dataset, `--max-windows`,
+`--batch-size`, and `--epochs` consistent with the original scheduled run.
