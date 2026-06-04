@@ -1,0 +1,87 @@
+{
+  "checkpoint": "runs/qalf_mixed_smoke/model.pt",
+  "device": "cuda",
+  "training_metadata": {
+    "data": "data/seed_corpus.jsonl",
+    "device": "cuda",
+    "epochs": 2,
+    "examples": 50,
+    "attractor_limit": 500,
+    "windows": 1000,
+    "history": [
+      {
+        "epoch": 1,
+        "loss": 4.616696632385254,
+        "lr": 0.01,
+        "global_step": 16,
+        "trace_mean": 1.0,
+        "purity_mean": 0.43054503202438354,
+        "context_norm_mean": 1.0,
+        "component_entropy": 1.385369062423706,
+        "components": 4.0
+      },
+      {
+        "epoch": 2,
+        "loss": 3.5215322132110596,
+        "lr": 0.01,
+        "global_step": 32,
+        "trace_mean": 1.0,
+        "purity_mean": 0.45682844519615173,
+        "context_norm_mean": 1.0,
+        "component_entropy": 1.378198266029358,
+        "components": 4.0
+      }
+    ],
+    "seed_examples_count": 50
+  },
+  "loss": 3.552250862121582,
+  "perplexity": 34.89176559448242,
+  "diagnostics": {
+    "trace_mean": 1.0,
+    "purity_mean": 0.5607599020004272,
+    "context_norm_mean": 1.0,
+    "component_entropy": 1.378198266029358,
+    "components": 4.0
+  },
+  "samples": [
+    {
+      "prompt": "What is QALF?",
+      "reply": "QALF is a small quantum associative language field. It represents words as complex states and answers by measuring possible next words.",
+      "source": "prompt_attractor",
+      "attractor_score": 1.0
+    },
+    {
+      "prompt": "Explain the density context in one sentence.",
+      "reply": "Density is a normalized matrix view of the active language state, useful for measuring and diagnosing context.",
+      "source": "prompt_attractor",
+      "attractor_score": 0.75
+    },
+    {
+      "prompt": "How does the model choose the next word?",
+      "reply": "It transforms the context with learned complex relation operators, compares every token state, and samples from Born style probabilities.",
+      "source": "prompt_attractor",
+      "attractor_score": 1.0
+    },
+    {
+      "prompt": "What happens when the answer is uncertain?",
+      "reply": "When QALF is uncertain, the probability field is flatter. The sampled answer becomes shorter, more cautious, and less specific.",
+      "source": "prompt_attractor",
+      "attractor_score": 0.6958333333333333
+    },
+    {
+      "prompt": "Give a tiny example of phase in language.",
+      "reply": "The word bank can lean toward money or river. Context rotates the state so one meaning resonates more strongly.",
+      "source": "prompt_attractor",
+      "attractor_score": 0.6666666666666666
+    }
+  ],
+  "generation": {
+    "temperature": 0.0,
+    "top_k": 18,
+    "attractor": true,
+    "attractor_threshold": 0.34,
+    "attractor_data": null,
+    "attractor_size": 50,
+    "eval_batch_size": 128
+  }
+}

@@ -1,0 +1,3 @@
+{"time": 1780614949.8256028, "stage": "eval_start", "checkpoint": "runs/qalf_mixed_smoke/model.pt", "data": "data/seed_corpus.jsonl", "device": "cuda"}
+{"time": 1780614949.9895551, "stage": "eval_windows", "windows": 1520, "eval_batch_size": 128}
+{"time": 1780614950.3541272, "stage": "eval_complete", "loss": 3.552250862121582, "perplexity": 34.89176559448242, "out": "runs/qalf_mixed_smoke/eval.json"}

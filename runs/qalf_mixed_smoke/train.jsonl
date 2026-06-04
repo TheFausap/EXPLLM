@@ -1,0 +1,11 @@
+{"time": 1780614930.1210878, "stage": "read_data", "examples": 50, "data": "data/seed_corpus.jsonl"}
+{"time": 1780614930.1221154, "stage": "build_tokenizer", "vocab": 413}
+{"time": 1780614930.1443331, "stage": "make_windows", "windows": 1000, "context_size": 16, "window_tensor_gb": 0.00014156103134155273}
+{"time": 1780614930.1610632, "stage": "build_higher_order_memory", "trigram_contexts": 167, "trigram_top_k": 32, "bigram_gb": 0.0006354190409183502, "trigram_gb": 6.0968101024627686e-05}
+{"time": 1780614930.1611004, "stage": "init_model", "device": "cuda", "dimension": 32, "relations": 4, "components": 4}
+{"time": 1780614930.9632947, "stage": "lr_schedule", "schedule": "constant", "base_lr": 0.01, "warmup_fraction": 0.03, "min_lr_ratio": 0.1, "start_global_step": 0, "total_steps": 32, "steps_per_epoch": 16}
+{"time": 1780614931.573911, "epoch": 1, "loss": 4.616696632385254, "lr": 0.01, "global_step": 16, "trace_mean": 1.0, "purity_mean": 0.43054503202438354, "context_norm_mean": 1.0, "component_entropy": 1.385369062423706, "components": 4.0}
+{"time": 1780614931.5788221, "stage": "checkpoint", "epoch": 1, "checkpoint": "runs/qalf_mixed_smoke/checkpoint_epoch_1.pt"}
+{"time": 1780614931.6564767, "epoch": 2, "loss": 3.5215322132110596, "lr": 0.01, "global_step": 32, "trace_mean": 1.0, "purity_mean": 0.45682844519615173, "context_norm_mean": 1.0, "component_entropy": 1.378198266029358, "components": 4.0}
+{"time": 1780614931.660363, "stage": "checkpoint", "epoch": 2, "checkpoint": "runs/qalf_mixed_smoke/checkpoint_epoch_2.pt"}
+{"time": 1780614931.663386, "stage": "saved", "checkpoint": "runs/qalf_mixed_smoke/model.pt"}

@@ -202,3 +202,75 @@ If the first two epochs are unstable or loss spikes, lower `--lr` to `0.006`.
 If the loss still plateaus early and VRAM is healthy, try `--batch-size 2048`
 with `--lr 0.01`. For exact resume behavior, keep dataset, `--max-windows`,
 `--batch-size`, and `--epochs` consistent with the original scheduled run.
+
+## QALF-Mixed DGX Run
+
+QALF-Mixed replaces the previous rank-one context with a mixture of several
+phase-weighted context components. In logs, `purity_mean` should now be below
+`1.0`; that is the sanity check that the density context is actually mixed.
+
+Short comparison run first:
+
+```bash
+conda run -n EXPLLM python -m qalf.train \
+  --data data/tinystories_train_100k_qalf.jsonl \
+  --out runs/qalf_mixed_compare \
+  --device cuda \
+  --dimension 512 \
+  --context-size 128 \
+  --components 6 \
+  --vocab-size 32000 \
+  --epochs 8 \
+  --batch-size 2048 \
+  --lr 0.004 \
+  --lr-schedule constant \
+  --max-windows 10000000 \
+  --relations 12 \
+  --trigram-top-k 96 \
+  --trigram-min-count 2 \
+  --trigram-strength 1.0 \
+  --attractor-limit 2000 \
+  --save-every 2 \
+  --log-every 1 \
+  --log-file runs/qalf_mixed_compare/train.jsonl
+```
+
+If the comparison run beats the rank-one curve or gives better raw samples, run
+a longer version:
+
+```bash
+conda run -n EXPLLM python -m qalf.train \
+  --data data/tinystories_train_100k_qalf.jsonl \
+  --out runs/qalf_mixed_dgx \
+  --device cuda \
+  --dimension 768 \
+  --context-size 160 \
+  --components 8 \
+  --vocab-size 32000 \
+  --epochs 20 \
+  --batch-size 2048 \
+  --lr 0.004 \
+  --lr-schedule constant \
+  --max-windows 10000000 \
+  --relations 16 \
+  --trigram-top-k 128 \
+  --trigram-min-count 2 \
+  --trigram-strength 1.0 \
+  --attractor-limit 2000 \
+  --save-every 2 \
+  --log-every 1 \
+  --log-file runs/qalf_mixed_dgx/train.jsonl
+```
+
+Evaluate raw generation first; the main goal is not lower attractor-backed loss,
+but better `--no-attractor` samples:
+
+```bash
+conda run -n EXPLLM python -m qalf.eval \
+  --checkpoint runs/qalf_mixed_compare/model.pt \
+  --data data/tinystories_train_100k_qalf.jsonl \
+  --out runs/qalf_mixed_compare/eval_raw.json \
+  --no-attractor \
+  --eval-batch-size 1024 \
+  --log-file runs/qalf_mixed_compare/eval_raw.jsonl
+```

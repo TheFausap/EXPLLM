@@ -201,6 +201,22 @@ add higher-order associative memory or mixed-state dynamics rather than only
 adding more examples.
 
 
+
+## QALF-Mixed Update
+
+The next architecture replaces the rank-one context state with a mixed density
+context. Instead of compressing a whole prompt into one pure vector, QALF-Mixed
+builds several phase-weighted context components, measures candidate tokens under
+each component, and combines those Born-style distributions with learned mixture
+weights. The density diagnostic should now show `purity_mean < 1.0`, which means
+the model is no longer pretending that one pure state is enough to represent the
+active context.
+
+A CUDA smoke run with four components produced `purity_mean` around `0.43-0.56`,
+confirming that the density object is genuinely mixed. The DGX comparison run
+should test whether this improves raw `--no-attractor` story generation, not only
+training loss.
+
 ## DGX Spark Plan
 
 The next planned run moves QALF from first-order/bigram stabilization toward

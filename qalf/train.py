@@ -23,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dimension", type=int, default=64)
     parser.add_argument("--context-size", type=int, default=24)
     parser.add_argument("--relations", type=int, default=4)
+    parser.add_argument("--components", type=int, default=4)
     parser.add_argument("--vocab-size", type=int, default=4096)
     parser.add_argument("--epochs", type=int, default=140)
     parser.add_argument("--batch-size", type=int, default=128)
@@ -91,6 +92,7 @@ def main() -> None:
             dimension=args.dimension,
             context_size=args.context_size,
             num_relations=args.relations,
+            num_components=args.components,
             trigram_strength=args.trigram_strength,
             pad_id=tokenizer.pad_id,
         )
@@ -112,7 +114,7 @@ def main() -> None:
     trigram_gb = sum(t.numel() * t.element_size() for t in trigram.values()) / (1024 ** 3)
     logger.emit({"stage": "build_higher_order_memory", "trigram_contexts": int(trigram["keys"].numel()), "trigram_top_k": args.trigram_top_k, "bigram_gb": bigram_gb, "trigram_gb": trigram_gb})
     device = device_for_training(args.device)
-    logger.emit({"stage": "init_model", "device": str(device), "dimension": config.dimension, "relations": config.num_relations})
+    logger.emit({"stage": "init_model", "device": str(device), "dimension": config.dimension, "relations": config.num_relations, "components": config.num_components})
     if model is None:
         model = QALFModel(config, bigram_logits=bigram, trigram_prior=trigram)
     else:

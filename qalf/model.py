@@ -23,6 +23,7 @@ class QALFConfig:
     dimension: int = 64
     context_size: int = 24
     num_relations: int = 4
+    num_components: int = 4
     bigram_strength: float = 0.35
     trigram_strength: float = 0.75
     pad_id: int = 0
@@ -77,6 +78,8 @@ class QALFModel(nn.Module):
         self.lexicon = QuantumLexicon(config.vocab_size, config.dimension)
         self.memory = EntangledMemory(config.dimension, config.num_relations)
         self.phase_frequencies = nn.Parameter(torch.linspace(0.05, 1.25, config.dimension))
+        self.component_logits = nn.Parameter(torch.zeros(config.num_components))
+        self.component_phase_offsets = nn.Parameter(torch.linspace(0.0, 1.0, config.num_components))
         self.output_bias = nn.Parameter(torch.zeros(config.vocab_size))
         if bigram_logits is None:
             bigram_logits = torch.zeros(config.vocab_size, config.vocab_size, dtype=torch.float32)
@@ -91,23 +94,53 @@ class QALFModel(nn.Module):
         self.register_buffer("trigram_token_ids", trigram_prior["token_ids"].long())
         self.register_buffer("trigram_token_logits", trigram_prior["token_logits"].float())
 
-    def context_state(self, context_ids: torch.Tensor) -> torch.Tensor:
+    def component_weights(self, context_ids: torch.Tensor) -> torch.Tensor:
+        batch, length = context_ids.shape
+        device = context_ids.device
+        positions = torch.linspace(0.0, 1.0, length, device=device)
+        components: list[torch.Tensor] = []
+        components.append(torch.linspace(0.35, 1.0, length, device=device))
+        components.append(torch.exp(-5.0 * (1.0 - positions)))
+        components.append(torch.exp(-2.2 * positions))
+        components.append(0.55 + 0.45 * torch.sin(torch.pi * positions).clamp_min(0.0))
+        for idx in range(4, self.config.num_components):
+            center = (idx - 3) / max(self.config.num_components - 3, 1)
+            components.append(torch.exp(-16.0 * (positions - center).square()))
+        weights = torch.stack(components[: self.config.num_components], dim=0)
+        mask = context_ids.ne(self.config.pad_id).float()
+        weights = weights[None, :, :] * mask[:, None, :]
+        return weights
+
+    def context_components(self, context_ids: torch.Tensor) -> torch.Tensor:
         states = self.lexicon()
         embedded = states[context_ids]
-        mask = context_ids.ne(self.config.pad_id).float()
+        weights = self.component_weights(context_ids)
         positions = torch.arange(context_ids.shape[1], device=context_ids.device, dtype=torch.float32)
-        decay = torch.linspace(0.35, 1.0, context_ids.shape[1], device=context_ids.device)
-        phase = torch.exp(1j * positions[:, None] * self.phase_frequencies[None, :])
-        weighted = embedded * phase[None, :, :] * decay[None, :, None].to(embedded.dtype)
-        weighted = weighted * mask[:, :, None].to(weighted.dtype)
-        state = weighted.sum(dim=1)
-        empty = mask.sum(dim=1).eq(0)
+        phase_base = positions[:, None] * self.phase_frequencies[None, :]
+        phases = []
+        for component in range(self.config.num_components):
+            offset = self.component_phase_offsets[component]
+            phases.append(torch.exp(1j * (phase_base + offset * positions[:, None])))
+        phase = torch.stack(phases, dim=0)
+        weighted = embedded[:, None, :, :] * phase[None, :, :, :] * weights[:, :, :, None].to(embedded.dtype)
+        components = weighted.sum(dim=2)
+        empty = weights.sum(dim=-1).eq(0)
         if empty.any():
-            state[empty] = states[self.config.pad_id]
-        return normalize_complex(state)
+            pad_state = states[self.config.pad_id]
+            components[empty] = pad_state
+        return normalize_complex(components)
+
+    def context_state(self, context_ids: torch.Tensor) -> torch.Tensor:
+        mix = torch.softmax(self.component_logits, dim=0).to(self.context_components(context_ids).dtype)
+        return normalize_complex(torch.einsum("c,bcd->bd", mix, self.context_components(context_ids)))
 
     def density(self, context_ids: torch.Tensor) -> torch.Tensor:
-        return density_from_state(self.context_state(context_ids))
+        components = self.context_components(context_ids)
+        mix = torch.softmax(self.component_logits, dim=0).to(components.dtype)
+        projectors = components.unsqueeze(-1) * components.conj().unsqueeze(-2)
+        rho = torch.einsum("c,bcde->bde", mix, projectors)
+        trace = torch.diagonal(rho, dim1=-2, dim2=-1).sum(dim=-1).real.clamp_min(1e-8)
+        return rho / trace[:, None, None].to(rho.dtype)
 
     def trigram_logits_for(self, prev2_ids: torch.Tensor, prev_ids: torch.Tensor) -> torch.Tensor:
         logits = torch.zeros(prev_ids.shape[0], self.config.vocab_size, device=prev_ids.device)
@@ -137,11 +170,14 @@ class QALFModel(nn.Module):
         prev2_ids: torch.Tensor | None = None,
     ) -> torch.Tensor:
         token_states = self.lexicon()
-        context = self.context_state(context_ids)
-        related = normalize_complex(self.memory(context))
-        amplitudes = related @ token_states.conj().transpose(0, 1)
+        components = self.context_components(context_ids)
+        batch, num_components, dim = components.shape
+        related = normalize_complex(self.memory(components.reshape(batch * num_components, dim)))
+        related = related.reshape(batch, num_components, dim)
+        amplitudes = torch.einsum("bcd,vd->bcv", related, token_states.conj())
         born_logits = torch.log(amplitudes.abs().square().clamp_min(1e-8))
-        logits = born_logits + self.output_bias[None, :]
+        mix_log = torch.log_softmax(self.component_logits, dim=0).to(born_logits.dtype)
+        logits = torch.logsumexp(born_logits + mix_log[None, :, None], dim=1) + self.output_bias[None, :]
         if prev_ids is not None:
             logits = logits + self.config.bigram_strength * self.bigram_logits[prev_ids]
             if prev2_ids is not None:
@@ -151,10 +187,14 @@ class QALFModel(nn.Module):
     @torch.no_grad()
     def diagnostics(self, context_ids: torch.Tensor) -> dict[str, float]:
         rho = self.density(context_ids)
+        mix = torch.softmax(self.component_logits, dim=0)
+        entropy = -(mix * mix.clamp_min(1e-8).log()).sum()
         return {
             "trace_mean": float(trace_real(rho).mean().cpu()),
             "purity_mean": float(purity(rho).mean().cpu()),
             "context_norm_mean": float(torch.linalg.vector_norm(self.context_state(context_ids), dim=-1).mean().cpu()),
+            "component_entropy": float(entropy.detach().cpu()),
+            "components": float(self.config.num_components),
         }
 
     @torch.no_grad()
