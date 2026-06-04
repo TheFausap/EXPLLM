@@ -1,0 +1,11 @@
+{"time": 1780598240.9438136, "stage": "read_data", "examples": 50, "data": "data/seed_corpus.jsonl"}
+{"time": 1780598240.951346, "stage": "resume_checkpoint", "checkpoint": "runs/qalf_lr_smoke/checkpoint_epoch_1.pt", "start_epoch": 2, "vocab": 413}
+{"time": 1780598240.9759753, "stage": "make_windows", "windows": 1520, "context_size": 16, "window_tensor_gb": 0.00021517276763916016}
+{"time": 1780598240.994079, "stage": "build_higher_order_memory", "trigram_contexts": 167, "trigram_top_k": 32, "bigram_gb": 0.0006354190409183502, "trigram_gb": 6.0968101024627686e-05}
+{"time": 1780598240.9941154, "stage": "init_model", "device": "cuda", "dimension": 32, "relations": 4}
+{"time": 1780598241.8192112, "stage": "lr_schedule", "schedule": "warmup-cosine", "base_lr": 0.02, "warmup_fraction": 0.2, "min_lr_ratio": 0.2, "start_global_step": 16, "total_steps": 72, "steps_per_epoch": 24}
+{"time": 1780598242.2382, "epoch": 2, "loss": 3.9471347357097426, "lr": 0.013719763521688194, "global_step": 40, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780598242.2421968, "stage": "checkpoint", "epoch": 2, "checkpoint": "runs/qalf_lr_smoke_resume/checkpoint_epoch_2.pt"}
+{"time": 1780598242.3314877, "epoch": 3, "loss": 3.167944652155826, "lr": 0.0049319036444318174, "global_step": 64, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780598242.3348715, "stage": "checkpoint", "epoch": 3, "checkpoint": "runs/qalf_lr_smoke_resume/checkpoint_epoch_3.pt"}
+{"time": 1780598242.337759, "stage": "saved", "checkpoint": "runs/qalf_lr_smoke_resume/model.pt"}

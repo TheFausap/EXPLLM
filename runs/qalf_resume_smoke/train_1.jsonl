@@ -1,0 +1,8 @@
+{"time": 1780598047.5084848, "stage": "read_data", "examples": 50, "data": "data/seed_corpus.jsonl"}
+{"time": 1780598047.5095842, "stage": "build_tokenizer", "vocab": 413}
+{"time": 1780598047.5340114, "stage": "make_windows", "windows": 1000, "context_size": 16, "window_tensor_gb": 0.00014156103134155273}
+{"time": 1780598047.5527933, "stage": "build_higher_order_memory", "trigram_contexts": 167, "trigram_top_k": 32, "bigram_gb": 0.0006354190409183502, "trigram_gb": 6.0968101024627686e-05}
+{"time": 1780598047.5528347, "stage": "init_model", "device": "cuda", "dimension": 32, "relations": 4}
+{"time": 1780598048.7817707, "epoch": 1, "loss": 5.08262007522583, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780598048.7865329, "stage": "checkpoint", "epoch": 1, "checkpoint": "runs/qalf_resume_smoke/checkpoint_epoch_1.pt"}
+{"time": 1780598048.789783, "stage": "saved", "checkpoint": "runs/qalf_resume_smoke/model.pt"}

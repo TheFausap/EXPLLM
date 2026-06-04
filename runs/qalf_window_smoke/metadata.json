@@ -1,0 +1,219 @@
+{
+  "data": "data/seed_corpus.jsonl",
+  "device": "cuda",
+  "epochs": 1,
+  "examples": 50,
+  "seed_examples": [
+    {
+      "prompt": "What is QALF?",
+      "reply": "QALF is a small quantum associative language field. It represents words as complex states and answers by measuring possible next words."
+    },
+    {
+      "prompt": "Explain QALF simply.",
+      "reply": "QALF treats language like a field of phases. A prompt changes the field, and the reply is sampled from the strongest resonances."
+    },
+    {
+      "prompt": "What is a Hilbert token state?",
+      "reply": "A Hilbert token state is a normalized complex vector. Its direction carries meaning and its phase can rotate through context."
+    },
+    {
+      "prompt": "What is the density context?",
+      "reply": "The density context is a trace normalized matrix made from the recent conversation state. It is a compact memory of what is active now."
+    },
+    {
+      "prompt": "How does the model choose the next word?",
+      "reply": "It transforms the context with learned complex relation operators, compares every token state, and samples from Born style probabilities."
+    },
+    {
+      "prompt": "Does QALF use attention?",
+      "reply": "No. QALF does not use self attention, transformer blocks, recurrent gates, or pretrained language model weights."
+    },
+    {
+      "prompt": "What is entangled memory in QALF?",
+      "reply": "Entangled memory is a bank of complex operators learned from local token relations. The operators bend the context toward likely continuations."
+    },
+    {
+      "prompt": "Why use complex numbers for language?",
+      "reply": "Complex numbers separate magnitude from phase. That gives the model a natural way to represent interference, rotation, and resonance."
+    },
+    {
+      "prompt": "What does phase mean in this model?",
+      "reply": "Phase is a contextual angle. Two similar words can reinforce each other, while mismatched words can partially cancel."
+    },
+    {
+      "prompt": "Give a tiny phase example.",
+      "reply": "The word bank can lean toward money or river. Context rotates the state so one meaning resonates more strongly."
+    },
+    {
+      "prompt": "What happens when QALF is uncertain?",
+      "reply": "When QALF is uncertain, the probability field is flatter. The sampled answer becomes shorter, more cautious, and less specific."
+    },
+    {
+      "prompt": "What is the goal of this experiment?",
+      "reply": "The goal is not to beat existing models. The goal is to show that another mathematical route for language generation can be built and studied."
+    },
+    {
+      "prompt": "Can this scale to a bigger model?",
+      "reply": "The concept can scale by increasing the Hilbert dimension, vocabulary, relation rank, and training data. Tensor networks may compress larger operators."
+    },
+    {
+      "prompt": "What is a Born rule decoder?",
+      "reply": "A Born rule decoder turns complex amplitudes into probabilities by taking squared magnitudes and normalizing the result."
+    },
+    {
+      "prompt": "How should I read a QALF reply?",
+      "reply": "Read it as a measurement from a learned language field, not as a hidden chain of attention maps."
+    },
+    {
+      "prompt": "Describe the training signal.",
+      "reply": "Training asks the field to assign high probability to the next observed token after a context window."
+    },
+    {
+      "prompt": "What data does QALF need?",
+      "reply": "For the proof of concept, QALF uses short local dialogues about its own ideas, small explanations, and compact reasoning patterns."
+    },
+    {
+      "prompt": "What is the main limitation?",
+      "reply": "The main limitation is scale. A tiny corpus and tiny Hilbert space can show the mechanism, but they cannot give broad knowledge."
+    },
+    {
+      "prompt": "Can QALF reason?",
+      "reply": "This proof of concept can imitate short explanation patterns. Deeper reasoning would need richer operators, more data, and larger training."
+    },
+    {
+      "prompt": "What makes QALF different from a transformer?",
+      "reply": "A transformer routes information through attention over token positions. QALF evolves one complex context state and measures candidate tokens."
+    },
+    {
+      "prompt": "Summarize the architecture.",
+      "reply": "Tokenizer, complex lexicon, density context, entangled operators, Born decoder, and sampling form the QALF architecture."
+    },
+    {
+      "prompt": "What is a tensor product useful for here?",
+      "reply": "A tensor product can represent coupled meanings, such as a noun and a modifier forming a joint state."
+    },
+    {
+      "prompt": "What is an operator in QALF?",
+      "reply": "An operator is a learned complex matrix that changes the context state before the model measures candidate words."
+    },
+    {
+      "prompt": "Why keep the context trace normalized?",
+      "reply": "Trace normalization keeps the density context comparable across prompts and prevents the field from growing without bound."
+    },
+    {
+      "prompt": "What is a coherent answer for this PoC?",
+      "reply": "A coherent answer is short, topical, grammatical enough to inspect, and consistent with the concepts in the training corpus."
+    },
+    {
+      "prompt": "What should the paper report?",
+      "reply": "The paper should report the mathematical idea, implementation, training setup, sample replies, limitations, and scale up path."
+    },
+    {
+      "prompt": "What is the scale up path?",
+      "reply": "Scale up means larger complex states, more relation operators, better corpora, GPU training, and possible tensor network compression."
+    },
+    {
+      "prompt": "How does QALF handle a prompt?",
+      "reply": "The tokenizer converts the prompt to ids. The lexicon maps ids to complex states. The density context mixes recent states into one field."
+    },
+    {
+      "prompt": "How does QALF produce a sentence?",
+      "reply": "QALF repeatedly measures the next token distribution, samples a token, updates the context, and stops at an end marker."
+    },
+    {
+      "prompt": "Is QALF quantum hardware?",
+      "reply": "No. QALF is quantum inspired software. It borrows Hilbert states, density matrices, phases, and Born probabilities."
+    },
+    {
+      "prompt": "What should a failure look like?",
+      "reply": "A failure may repeat words, drift from the prompt, stop too early, or produce vague phrases. Those failures are part of the finding."
+    },
+    {
+      "prompt": "What is resonance?",
+      "reply": "Resonance is high compatibility between the transformed context state and a candidate token state."
+    },
+    {
+      "prompt": "What is interference?",
+      "reply": "Interference is the way complex phases reinforce or cancel when token states combine into a context."
+    },
+    {
+      "prompt": "Why not use a pretrained model?",
+      "reply": "Using a pretrained model would hide the experiment. QALF needs to show what its own mathematical machinery can do."
+    },
+    {
+      "prompt": "What is the smallest useful result?",
+      "reply": "The smallest useful result is a trained checkpoint that answers several prompts with recognizable QALF concepts."
+    },
+    {
+      "prompt": "Explain density in one sentence.",
+      "reply": "Density is a normalized matrix view of the active language state, useful for measuring and diagnosing context."
+    },
+    {
+      "prompt": "Explain entanglement in one sentence.",
+      "reply": "Entanglement means that relations between words are represented jointly rather than as isolated independent scores."
+    },
+    {
+      "prompt": "Explain Born decoding in one sentence.",
+      "reply": "Born decoding converts compatibility amplitudes into next token probabilities through squared magnitude."
+    },
+    {
+      "prompt": "Give a concise answer about uncertainty.",
+      "reply": "Uncertainty appears as a flatter probability distribution over candidate words."
+    },
+    {
+      "prompt": "Give a concise answer about scale.",
+      "reply": "Larger scale requires more data, wider Hilbert spaces, more relation rank, and stronger hardware."
+    },
+    {
+      "prompt": "What is the implementation language?",
+      "reply": "The implementation is Python with PyTorch complex tensors, because it is practical for the proof of concept."
+    },
+    {
+      "prompt": "What is the model output?",
+      "reply": "The model output is a short assistant reply sampled token by token from the learned quantum associative field."
+    },
+    {
+      "prompt": "How can we inspect QALF?",
+      "reply": "We inspect loss, sample replies, density trace, density purity, and whether probabilities remain valid."
+    },
+    {
+      "prompt": "What is the paper title?",
+      "reply": "A possible title is Quantum Associative Language Fields: A Complex Hilbert Space Proof of Concept for Generative Language."
+    },
+    {
+      "prompt": "What should future work try?",
+      "reply": "Future work should try larger corpora, richer relation operators, tensor network factorization, and comparison with simple baselines."
+    },
+    {
+      "prompt": "Write a short abstract.",
+      "reply": "This work explores a generative language model based on complex token states, density context, entangled relation operators, and Born style decoding."
+    },
+    {
+      "prompt": "What is learned during training?",
+      "reply": "Training learns token states, relation operators, phase frequencies, and output bias so observed continuations become more probable."
+    },
+    {
+      "prompt": "What is fixed during training?",
+      "reply": "The tokenizer, sequence format, and bigram count prior are fixed after the corpus is read."
+    },
+    {
+      "prompt": "Can QALF be creative?",
+      "reply": "At small scale QALF can recombine learned phrases. Real creativity would require broader data and stronger generative structure."
+    },
+    {
+      "prompt": "What is a good demo prompt?",
+      "reply": "A good demo prompt asks what QALF is, how Born decoding works, or why complex phase matters for language."
+    }
+  ],
+  "attractor_limit": 500,
+  "windows": 1000,
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 5.059713451385498,
+      "trace_mean": 1.0,
+      "purity_mean": 1.0,
+      "context_norm_mean": 1.0
+    }
+  ]
+}

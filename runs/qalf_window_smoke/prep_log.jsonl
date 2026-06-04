@@ -1,0 +1,3 @@
+{"time": 1780577089.8471334, "stage": "read_source", "source": "file", "chars": 19432979}
+{"time": 1780577090.573262, "stage": "split_stories", "stories": 21990}
+{"time": 1780577090.579066, "stage": "prepared", "out": "runs/qalf_window_smoke/prep.jsonl", "examples": 51, "stories_seen": 21990}
