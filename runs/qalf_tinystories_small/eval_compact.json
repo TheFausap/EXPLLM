@@ -1,0 +1,104 @@
+{
+  "checkpoint": "runs/qalf_tinystories_small/model.pt",
+  "device": "cpu",
+  "training_metadata": {
+    "data": "data/tinystories_qalf.jsonl",
+    "device": "cpu",
+    "epochs": 15,
+    "examples": 2000,
+    "attractor_limit": 300,
+    "windows": 30000,
+    "history": [
+      {
+        "epoch": 1,
+        "loss": 4.4746124608357745,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 3,
+        "loss": 3.550924669647217,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 6,
+        "loss": 2.9912122910817462,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0000001192092896,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 9,
+        "loss": 2.732162881088257,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 12,
+        "loss": 2.602878138987223,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 15,
+        "loss": 2.5265835870107014,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      }
+    ],
+    "seed_examples_count": 300
+  },
+  "loss": 3.823688268661499,
+  "perplexity": 45.77272033691406,
+  "diagnostics": {
+    "trace_mean": 1.0,
+    "purity_mean": 1.0,
+    "context_norm_mean": 1.0
+  },
+  "samples": [
+    {
+      "prompt": "What is QALF?",
+      "reply": "QALF is a small quantum associative language field. It represents words as complex states and answers by measuring possible next words.",
+      "source": "prompt_attractor",
+      "attractor_score": 1.0
+    },
+    {
+      "prompt": "Explain the density context in one sentence.",
+      "reply": "Density is a normalized matrix view of the active language state, useful for measuring and diagnosing context.",
+      "source": "prompt_attractor",
+      "attractor_score": 0.75
+    },
+    {
+      "prompt": "How does the model choose the next word?",
+      "reply": "It transforms the context with learned complex relation operators, compares every token state, and samples from Born style probabilities.",
+      "source": "prompt_attractor",
+      "attractor_score": 1.0
+    },
+    {
+      "prompt": "What happens when the answer is uncertain?",
+      "reply": "When QALF is uncertain, the probability field is flatter. The sampled answer becomes shorter, more cautious, and less specific.",
+      "source": "prompt_attractor",
+      "attractor_score": 0.5798611111111112
+    },
+    {
+      "prompt": "Give a tiny example of phase in language.",
+      "reply": "The word bank can lean toward money or river. Context rotates the state so one meaning resonates more strongly.",
+      "source": "prompt_attractor",
+      "attractor_score": 0.5555555555555556
+    }
+  ],
+  "generation": {
+    "temperature": 0.0,
+    "top_k": 18,
+    "attractor": true,
+    "attractor_threshold": 0.34,
+    "attractor_data": "data/tinystories_qalf.jsonl",
+    "attractor_size": 2000
+  }
+}

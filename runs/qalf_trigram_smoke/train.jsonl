@@ -1,0 +1,8 @@
+{"time": 1780570617.8562071, "stage": "read_data", "examples": 50, "data": "data/seed_corpus.jsonl"}
+{"time": 1780570617.8573215, "stage": "build_tokenizer", "vocab": 413}
+{"time": 1780570617.8619013, "stage": "make_windows", "windows": 1000, "context_size": 16}
+{"time": 1780570617.881014, "stage": "build_higher_order_memory", "trigram_contexts": 167, "trigram_top_k": 16}
+{"time": 1780570617.881075, "stage": "init_model", "device": "cuda", "dimension": 32, "relations": 4}
+{"time": 1780570619.2048337, "epoch": 1, "loss": 5.059713451385498, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780570619.2639153, "epoch": 2, "loss": 3.5428310241699217, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780570619.267227, "stage": "saved", "checkpoint": "runs/qalf_trigram_smoke/model.pt"}

@@ -1,0 +1,126 @@
+{
+  "checkpoint": "runs/qalf_tinystories/model.pt",
+  "device": "cuda",
+  "training_metadata": {
+    "data": "data/tinystories_qalf.jsonl",
+    "device": "cuda",
+    "epochs": 40,
+    "examples": 2000,
+    "attractor_limit": 300,
+    "windows": 200000,
+    "history": [
+      {
+        "epoch": 1,
+        "loss": 3.97649975151062,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 5,
+        "loss": 3.061905644760132,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 10,
+        "loss": 2.8075034702301025,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 15,
+        "loss": 2.7112871816253663,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 20,
+        "loss": 2.6595646640777586,
+        "trace_mean": 1.0,
+        "purity_mean": 0.9999999403953552,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 25,
+        "loss": 2.6225662913513186,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 30,
+        "loss": 2.5945151959991457,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 35,
+        "loss": 2.571828753662109,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 40,
+        "loss": 2.553539044036865,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      }
+    ],
+    "seed_examples_count": 300
+  },
+  "loss": 2.4846813678741455,
+  "perplexity": 11.997297286987305,
+  "diagnostics": {
+    "trace_mean": 1.0,
+    "purity_mean": 1.0,
+    "context_norm_mean": 1.0
+  },
+  "samples": [
+    {
+      "prompt": "What is QALF?",
+      "reply": "To. \". it was the house,\" i can i want to play with. \". one day,\", she said to the park. \". the little girl,\" i can you. \" i can you. he",
+      "source": "born_decoder",
+      "attractor_score": null
+    },
+    {
+      "prompt": "Explain the density context in one sentence.",
+      "reply": ", \" the the was a big, a big, the",
+      "source": "born_decoder",
+      "attractor_score": null
+    },
+    {
+      "prompt": "How does the model choose the next word?",
+      "reply": "The the. \".\" mom, he was very excited to the",
+      "source": "born_decoder",
+      "attractor_score": null
+    },
+    {
+      "prompt": "What happens when the answer is uncertain?",
+      "reply": "To to. the little girl was a very excited and the. the. \" they went to",
+      "source": "born_decoder",
+      "attractor_score": null
+    },
+    {
+      "prompt": "Give a tiny example of phase in language.",
+      "reply": "The to the to a special. she was a the park, he was a big, and was very big and said to it was a big. it. but the big and said, \" the little girl,\" i",
+      "source": "born_decoder",
+      "attractor_score": null
+    }
+  ],
+  "generation": {
+    "temperature": 0.0,
+    "top_k": 18,
+    "attractor": false,
+    "attractor_threshold": 0.34,
+    "attractor_data": null,
+    "attractor_size": 0,
+    "eval_batch_size": 256
+  }
+}

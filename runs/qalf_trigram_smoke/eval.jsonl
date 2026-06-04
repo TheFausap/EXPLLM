@@ -1,0 +1,4 @@
+{"time": 1780570640.4330986, "stage": "eval_start", "checkpoint": "runs/qalf_trigram_smoke/model.pt", "data": "data/seed_corpus.jsonl", "device": "cuda"}
+{"time": 1780570680.486004, "stage": "eval_start", "checkpoint": "runs/qalf_trigram_smoke/model.pt", "data": "data/seed_corpus.jsonl", "device": "cuda"}
+{"time": 1780570680.6509871, "stage": "eval_windows", "windows": 1520, "eval_batch_size": 128}
+{"time": 1780570680.9230745, "stage": "eval_complete", "loss": 3.5871191024780273, "perplexity": 36.12984085083008, "out": "runs/qalf_trigram_smoke/eval.json"}
