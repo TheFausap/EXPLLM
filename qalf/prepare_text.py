@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 
 from qalf.data import read_jsonl
+from qalf.joblog import JobLogger
 from qalf.tokenizer import detokenize, tokenize_text
 
 
@@ -29,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--reply-tokens", type=int, default=80)
     parser.add_argument("--min-story-tokens", type=int, default=40)
     parser.add_argument("--seed", type=int, default=23)
+    parser.add_argument("--log-file", default=None)
     return parser.parse_args()
 
 
@@ -88,8 +90,11 @@ def story_to_example(story: str, prompt_tokens: int, reply_tokens: int) -> dict[
 def main() -> None:
     args = parse_args()
     random.seed(args.seed)
+    logger = JobLogger(args.log_file)
     raw = read_source(args)
+    logger.emit({"stage": "read_source", "source": args.source, "chars": len(raw)})
     stories = split_stories(raw)
+    logger.emit({"stage": "split_stories", "stories": len(stories)})
     random.shuffle(stories)
     examples: list[dict[str, str]] = []
     if args.mix_seed:
@@ -109,7 +114,9 @@ def main() -> None:
     with out.open("w", encoding="utf-8") as handle:
         for example in examples:
             handle.write(json.dumps(example, ensure_ascii=True) + "\n")
-    print(json.dumps({"out": str(out), "examples": len(examples), "stories_seen": len(stories)}, indent=2))
+    result = {"stage": "prepared", "out": str(out), "examples": len(examples), "stories_seen": len(stories)}
+    logger.emit(result)
+    logger.close()
 
 
 if __name__ == "__main__":

@@ -90,3 +90,58 @@ Share `runs/qalf_dgx_trigram/train.jsonl`, `eval.json`, and `eval_raw.json`
 after the run. If memory is tight, reduce `--batch-size` first, then
 `--max-windows`. If training is too fast and underuses the DGX, increase
 `--dimension` to `256` and `--max-windows` to all available windows.
+
+## DGX Spark Heavy Data Run
+
+The first DGX run used little RAM because `data/tinystories_qalf.jsonl` contains
+only 2,000 examples and produced only about 202k windows. To use the DGX Spark
+128 GB RAM, prepare a much larger TinyStories-train subset first. The updated
+trainer logs estimated memory for window tensors, bigram memory, and trigram
+memory.
+
+Start here:
+
+```bash
+conda run -n EXPLLM python -m qalf.prepare_text \
+  --source tinystories-train \
+  --out data/tinystories_train_100k_qalf.jsonl \
+  --max-examples 100000 \
+  --prompt-tokens 24 \
+  --reply-tokens 128 \
+  --log-file runs/qalf_dgx_heavy/prep.jsonl
+
+conda run -n EXPLLM python -m qalf.train \
+  --data data/tinystories_train_100k_qalf.jsonl \
+  --out runs/qalf_dgx_heavy \
+  --device cuda \
+  --dimension 384 \
+  --context-size 128 \
+  --vocab-size 32000 \
+  --epochs 30 \
+  --batch-size 1024 \
+  --lr 0.004 \
+  --max-windows 5000000 \
+  --relations 12 \
+  --trigram-top-k 96 \
+  --trigram-min-count 2 \
+  --trigram-strength 1.0 \
+  --attractor-limit 2000 \
+  --log-every 2 \
+  --log-file runs/qalf_dgx_heavy/train.jsonl
+
+conda run -n EXPLLM python -m qalf.eval \
+  --checkpoint runs/qalf_dgx_heavy/model.pt \
+  --data data/tinystories_train_100k_qalf.jsonl \
+  --out runs/qalf_dgx_heavy/eval_raw.json \
+  --no-attractor \
+  --eval-batch-size 2048 \
+  --log-file runs/qalf_dgx_heavy/eval_raw.jsonl
+```
+
+Expected memory pressure is mostly from `contexts`: roughly
+`max_windows * context_size * 8` bytes before smaller side tensors. With
+5,000,000 windows and context 128, the context tensor alone is about 4.8 GiB;
+Python overhead is now reduced by preallocating tensors directly. The dense
+bigram prior at vocab 32k is about 4 GiB. This should still leave plenty of room
+on a 128 GB DGX Spark. If memory remains low and training is stable, raise
+`--max-windows` to `10000000`, then raise `--dimension` to `512`.

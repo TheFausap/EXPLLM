@@ -51,28 +51,31 @@ def make_windows(
     pad_id: int,
     include_prev2: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    contexts: list[list[int]] = []
-    targets: list[int] = []
-    prev_tokens: list[int] = []
-    prev2_tokens: list[int] = []
-    for example in encoded:
+    examples = list(encoded)
+    total = sum(max(len(example.sequence) - 1, 0) for example in examples)
+    contexts = torch.full((total, context_size), pad_id, dtype=torch.long)
+    prev_tokens = torch.empty(total, dtype=torch.long)
+    targets = torch.empty(total, dtype=torch.long)
+    prev2_tokens = torch.empty(total, dtype=torch.long) if include_prev2 else None
+
+    row = 0
+    for example in examples:
         seq = example.sequence
         for idx in range(1, len(seq)):
             start = max(0, idx - context_size)
             context = seq[start:idx]
-            padded = [pad_id] * (context_size - len(context)) + context
-            contexts.append(padded)
-            targets.append(seq[idx])
-            prev_tokens.append(seq[idx - 1])
-            prev2_tokens.append(seq[idx - 2] if idx >= 2 else pad_id)
-    base = (
-        torch.tensor(contexts, dtype=torch.long),
-        torch.tensor(prev_tokens, dtype=torch.long),
-        torch.tensor(targets, dtype=torch.long),
-    )
+            offset = context_size - len(context)
+            contexts[row, offset:] = torch.tensor(context, dtype=torch.long)
+            prev_tokens[row] = seq[idx - 1]
+            targets[row] = seq[idx]
+            if prev2_tokens is not None:
+                prev2_tokens[row] = seq[idx - 2] if idx >= 2 else pad_id
+            row += 1
+
+    base = (contexts, prev_tokens, targets)
     if not include_prev2:
         return base
-    return (base[0], torch.tensor(prev2_tokens, dtype=torch.long), base[1], base[2])
+    return (contexts, prev2_tokens, prev_tokens, targets)
 
 
 def relation_counts(encoded: Iterable[EncodedExample], vocab_size: int, smoothing: float = 0.05) -> torch.Tensor:

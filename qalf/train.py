@@ -55,10 +55,13 @@ def main() -> None:
         prev2_tokens = prev2_tokens[order]
         prev_tokens = prev_tokens[order]
         targets = targets[order]
-    logger.emit({"stage": "make_windows", "windows": int(targets.numel()), "context_size": args.context_size})
+    window_ram_gb = (contexts.numel() + prev2_tokens.numel() + prev_tokens.numel() + targets.numel()) * contexts.element_size() / (1024 ** 3)
+    logger.emit({"stage": "make_windows", "windows": int(targets.numel()), "context_size": args.context_size, "window_tensor_gb": window_ram_gb})
     bigram = relation_counts(encoded, len(tokenizer.vocab))
     trigram = trigram_counts(encoded, len(tokenizer.vocab), top_k=args.trigram_top_k, min_count=args.trigram_min_count)
-    logger.emit({"stage": "build_higher_order_memory", "trigram_contexts": int(trigram["keys"].numel()), "trigram_top_k": args.trigram_top_k})
+    bigram_gb = bigram.numel() * bigram.element_size() / (1024 ** 3)
+    trigram_gb = sum(t.numel() * t.element_size() for t in trigram.values()) / (1024 ** 3)
+    logger.emit({"stage": "build_higher_order_memory", "trigram_contexts": int(trigram["keys"].numel()), "trigram_top_k": args.trigram_top_k, "bigram_gb": bigram_gb, "trigram_gb": trigram_gb})
     config = QALFConfig(
         vocab_size=len(tokenizer.vocab),
         dimension=args.dimension,
