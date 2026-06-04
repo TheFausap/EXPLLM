@@ -1,0 +1,19 @@
+{"time": 1780571213.4520583, "stage": "read_data", "examples": 2000, "data": "data/tinystories_qalf.jsonl"}
+{"time": 1780571213.4930346, "stage": "build_tokenizer", "vocab": 4702}
+{"time": 1780571214.2866313, "stage": "make_windows", "windows": 202155, "context_size": 96}
+{"time": 1780571215.197429, "stage": "build_higher_order_memory", "trigram_contexts": 15631, "trigram_top_k": 64}
+{"time": 1780571215.1975362, "stage": "init_model", "device": "cuda", "dimension": 192, "relations": 8}
+{"time": 1780571229.3551326, "epoch": 1, "loss": 5.429414765751249, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571279.5175347, "epoch": 5, "loss": 4.158155271775888, "trace_mean": 1.0, "purity_mean": 0.9999999403953552, "context_norm_mean": 1.0}
+{"time": 1780571341.57548, "epoch": 10, "loss": 3.7138438759997405, "trace_mean": 1.0, "purity_mean": 1.0000001192092896, "context_norm_mean": 1.0}
+{"time": 1780571403.8141053, "epoch": 15, "loss": 3.553673642145936, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571466.3683786, "epoch": 20, "loss": 3.47017034456362, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571530.7360508, "epoch": 25, "loss": 3.413515478941185, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571594.518615, "epoch": 30, "loss": 3.3704089290279424, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571659.449838, "epoch": 35, "loss": 3.3389124703358344, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571722.8601954, "epoch": 40, "loss": 3.3127604234363366, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571786.29741, "epoch": 45, "loss": 3.2886437258121624, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571849.149195, "epoch": 50, "loss": 3.26969704193977, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571912.668658, "epoch": 55, "loss": 3.253562962818705, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571975.494056, "epoch": 60, "loss": 3.2326499548423286, "trace_mean": 1.0, "purity_mean": 1.0, "context_norm_mean": 1.0}
+{"time": 1780571976.613447, "stage": "saved", "checkpoint": "runs/qalf_dgx_trigram/model.pt"}

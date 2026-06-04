@@ -1,0 +1,154 @@
+{
+  "checkpoint": "runs/qalf_dgx_trigram/model.pt",
+  "device": "cuda",
+  "training_metadata": {
+    "data": "data/tinystories_qalf.jsonl",
+    "device": "cuda",
+    "epochs": 60,
+    "examples": 2000,
+    "attractor_limit": 1000,
+    "windows": 202155,
+    "history": [
+      {
+        "epoch": 1,
+        "loss": 5.429414765751249,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 5,
+        "loss": 4.158155271775888,
+        "trace_mean": 1.0,
+        "purity_mean": 0.9999999403953552,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 10,
+        "loss": 3.7138438759997405,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0000001192092896,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 15,
+        "loss": 3.553673642145936,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 20,
+        "loss": 3.47017034456362,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 25,
+        "loss": 3.413515478941185,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 30,
+        "loss": 3.3704089290279424,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 35,
+        "loss": 3.3389124703358344,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 40,
+        "loss": 3.3127604234363366,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 45,
+        "loss": 3.2886437258121624,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 50,
+        "loss": 3.26969704193977,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 55,
+        "loss": 3.253562962818705,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      },
+      {
+        "epoch": 60,
+        "loss": 3.2326499548423286,
+        "trace_mean": 1.0,
+        "purity_mean": 1.0,
+        "context_norm_mean": 1.0
+      }
+    ],
+    "seed_examples_count": 1000
+  },
+  "loss": 3.1512997150421143,
+  "perplexity": 23.366413116455078,
+  "diagnostics": {
+    "trace_mean": 1.0,
+    "purity_mean": 1.0,
+    "context_norm_mean": 1.0
+  },
+  "samples": [
+    {
+      "prompt": "What is QALF?",
+      "reply": "QALF is a small quantum associative language field. It represents words as complex states and answers by measuring possible next words.",
+      "source": "prompt_attractor",
+      "attractor_score": 1.0
+    },
+    {
+      "prompt": "Explain the density context in one sentence.",
+      "reply": "Density is a normalized matrix view of the active language state, useful for measuring and diagnosing context.",
+      "source": "prompt_attractor",
+      "attractor_score": 0.75
+    },
+    {
+      "prompt": "How does the model choose the next word?",
+      "reply": "It transforms the context with learned complex relation operators, compares every token state, and samples from Born style probabilities.",
+      "source": "prompt_attractor",
+      "attractor_score": 1.0
+    },
+    {
+      "prompt": "What happens when the answer is uncertain?",
+      "reply": "When QALF is uncertain, the probability field is flatter. The sampled answer becomes shorter, more cautious, and less specific.",
+      "source": "prompt_attractor",
+      "attractor_score": 0.6958333333333333
+    },
+    {
+      "prompt": "Give a tiny example of phase in language.",
+      "reply": "The word bank can lean toward money or river. Context rotates the state so one meaning resonates more strongly.",
+      "source": "prompt_attractor",
+      "attractor_score": 0.6666666666666666
+    }
+  ],
+  "generation": {
+    "temperature": 0.0,
+    "top_k": 18,
+    "attractor": true,
+    "attractor_threshold": 0.34,
+    "attractor_data": "data/tinystories_qalf.jsonl",
+    "attractor_size": 2000,
+    "eval_batch_size": 1024
+  }
+}

@@ -1,0 +1,3 @@
+{"time": 1780576079.383629, "stage": "eval_start", "checkpoint": "runs/qalf_dgx_trigram/model.pt", "data": "data/tinystories_qalf.jsonl", "device": "cuda"}
+{"time": 1780576080.403285, "stage": "eval_windows", "windows": 202155, "eval_batch_size": 1024}
+{"time": 1780576082.6139216, "stage": "eval_complete", "loss": 3.1512997150421143, "perplexity": 23.366413116455078, "out": "runs/qalf_dgx_trigram/eval_raw.json"}
