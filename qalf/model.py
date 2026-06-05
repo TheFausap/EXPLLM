@@ -179,7 +179,8 @@ class QALFModel(nn.Module):
         mix_log = torch.log_softmax(self.component_logits, dim=0).to(born_logits.dtype)
         logits = torch.logsumexp(born_logits + mix_log[None, :, None], dim=1) + self.output_bias[None, :]
         if prev_ids is not None:
-            logits = logits + self.config.bigram_strength * self.bigram_logits[prev_ids]
+            bg = self.bigram_logits[prev_ids.to(self.bigram_logits.device)].to(logits.device)
+            logits = logits + self.config.bigram_strength * bg
             if prev2_ids is not None:
                 logits = logits + self.config.trigram_strength * self.trigram_logits_for(prev2_ids, prev_ids)
         return logits

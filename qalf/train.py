@@ -42,6 +42,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lr-schedule", choices=["constant", "warmup-cosine"], default="constant")
     parser.add_argument("--warmup-fraction", type=float, default=0.03)
     parser.add_argument("--min-lr-ratio", type=float, default=0.1)
+    parser.add_argument("--bigram-device", default=None, help="Device to store the bigram buffer, e.g. 'cuda:1' or 'cpu'. Frees ~1 GB on the training GPU.")
     return parser.parse_args()
 
 
@@ -114,7 +115,8 @@ def main() -> None:
     trigram_gb = sum(t.numel() * t.element_size() for t in trigram.values()) / (1024 ** 3)
     logger.emit({"stage": "build_higher_order_memory", "trigram_contexts": int(trigram["keys"].numel()), "trigram_top_k": args.trigram_top_k, "bigram_gb": bigram_gb, "trigram_gb": trigram_gb})
     device = device_for_training(args.device)
-    logger.emit({"stage": "init_model", "device": str(device), "dimension": config.dimension, "relations": config.num_relations, "components": config.num_components})
+    bigram_device = torch.device(args.bigram_device) if args.bigram_device else device
+    logger.emit({"stage": "init_model", "device": str(device), "bigram_device": str(bigram_device), "dimension": config.dimension, "relations": config.num_relations, "components": config.num_components})
     if model is None:
         model = QALFModel(config, bigram_logits=bigram, trigram_prior=trigram)
     else:
@@ -123,6 +125,8 @@ def main() -> None:
         model.trigram_token_ids = trigram["token_ids"]
         model.trigram_token_logits = trigram["token_logits"]
     model = model.to(device)
+    if bigram_device != device:
+        model.bigram_logits = model.bigram_logits.to(bigram_device)
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
     dataset = TensorDataset(contexts, prev2_tokens, prev_tokens, targets)
@@ -173,6 +177,8 @@ def main() -> None:
                 training_state={"epoch": epoch, "global_step": global_step, "optimizer_state": optimizer.state_dict()},
             )
             model.to(device)
+            if bigram_device != device:
+                model.bigram_logits = model.bigram_logits.to(bigram_device)
             logger.emit({"stage": "checkpoint", "epoch": epoch, "checkpoint": str(out_dir / f"checkpoint_epoch_{epoch}.pt")})
     metadata = {
         "data": args.data,
