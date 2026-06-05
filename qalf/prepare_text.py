@@ -20,8 +20,11 @@ TINYSTORIES_TRAIN_URL = "https://huggingface.co/datasets/roneneldan/TinyStories/
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare text data for QALF")
-    parser.add_argument("--source", default="tinystories-valid", choices=["tinystories-valid", "tinystories-train", "file"])
-    parser.add_argument("--input", default=None, help="Local text path when --source file is used")
+    parser.add_argument("--source", default="tinystories-valid", choices=["tinystories-valid", "tinystories-train", "file", "jsonl"])
+    parser.add_argument("--input", default=None, help="Local path when --source file or --source jsonl is used")
+    parser.add_argument("--prompt-field", default="prompt", help="JSONL field to use as prompt (--source jsonl)")
+    parser.add_argument("--reply-field", default="output", help="JSONL field to use as reply (--source jsonl)")
+    parser.add_argument("--context-field", default=None, help="Optional JSONL field to prepend to prompt (--source jsonl)")
     parser.add_argument("--download-to", default=None, help="Optional path for downloaded raw text")
     parser.add_argument("--out", default="data/tinystories_qalf.jsonl")
     parser.add_argument("--mix-seed", default="data/seed_corpus.jsonl")
@@ -45,12 +48,43 @@ def read_source(args: argparse.Namespace) -> str:
         if args.input is None:
             raise ValueError("--input is required with --source file")
         return Path(args.input).read_text(encoding="utf-8", errors="replace")
+    if args.source == "jsonl":
+        return ""  # handled separately in main()
     url = TINYSTORIES_VALID_URL if args.source == "tinystories-valid" else TINYSTORIES_TRAIN_URL
     raw_path = Path(args.download_to or f"data/{args.source}.txt")
     if not raw_path.exists() or looks_like_lfs_pointer(raw_path):
         print(f"downloading {url} -> {raw_path}")
         download(url, raw_path)
     return raw_path.read_text(encoding="utf-8", errors="replace")
+
+
+def read_jsonl_source(
+    path: str,
+    prompt_field: str,
+    reply_field: str,
+    context_field: str | None,
+    max_examples: int,
+    rng: random.Random,
+) -> list[dict[str, str]]:
+    if path is None:
+        raise ValueError("--input is required with --source jsonl")
+    records: list[dict[str, str]] = []
+    with Path(path).open("r", encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            record = json.loads(line)
+            prompt = str(record.get(prompt_field, "")).strip()
+            reply = str(record.get(reply_field, "")).strip()
+            if context_field:
+                ctx = str(record.get(context_field, "")).strip()
+                if ctx:
+                    prompt = f"{ctx}\n{prompt}"
+            if prompt and reply:
+                records.append({"prompt": prompt, "reply": reply})
+    rng.shuffle(records)
+    return records[:max_examples]
 
 
 def looks_like_lfs_pointer(path: Path) -> bool:
@@ -89,33 +123,47 @@ def story_to_example(story: str, prompt_tokens: int, reply_tokens: int) -> dict[
 
 def main() -> None:
     args = parse_args()
+    rng = random.Random(args.seed)
     random.seed(args.seed)
     logger = JobLogger(args.log_file)
-    raw = read_source(args)
-    logger.emit({"stage": "read_source", "source": args.source, "chars": len(raw)})
-    stories = split_stories(raw)
-    logger.emit({"stage": "split_stories", "stories": len(stories)})
-    random.shuffle(stories)
     examples: list[dict[str, str]] = []
     if args.mix_seed:
         for example in read_jsonl(args.mix_seed):
             examples.append({"prompt": example.prompt, "reply": example.reply})
-    for story in stories:
-        tokens = tokenize_text(story)
-        if len(tokens) < args.min_story_tokens:
-            continue
-        example = story_to_example(story, args.prompt_tokens, args.reply_tokens)
-        if example is not None:
-            examples.append(example)
-        if len(examples) >= args.max_examples:
-            break
+    if args.source == "jsonl":
+        jsonl_examples = read_jsonl_source(
+            args.input,
+            prompt_field=args.prompt_field,
+            reply_field=args.reply_field,
+            context_field=args.context_field,
+            max_examples=args.max_examples,
+            rng=rng,
+        )
+        examples.extend(jsonl_examples)
+        logger.emit({"stage": "read_source", "source": args.source, "input": args.input, "examples": len(jsonl_examples)})
+        stories_seen = len(jsonl_examples)
+    else:
+        raw = read_source(args)
+        logger.emit({"stage": "read_source", "source": args.source, "chars": len(raw)})
+        stories = split_stories(raw)
+        logger.emit({"stage": "split_stories", "stories": len(stories)})
+        random.shuffle(stories)
+        for story in stories:
+            tokens = tokenize_text(story)
+            if len(tokens) < args.min_story_tokens:
+                continue
+            example = story_to_example(story, args.prompt_tokens, args.reply_tokens)
+            if example is not None:
+                examples.append(example)
+            if len(examples) >= args.max_examples:
+                break
+        stories_seen = len(stories)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8") as handle:
         for example in examples:
             handle.write(json.dumps(example, ensure_ascii=True) + "\n")
-    result = {"stage": "prepared", "out": str(out), "examples": len(examples), "stories_seen": len(stories)}
-    logger.emit(result)
+    logger.emit({"stage": "prepared", "out": str(out), "examples": len(examples), "stories_seen": stories_seen})
     logger.close()
 
 
