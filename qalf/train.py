@@ -43,6 +43,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup-fraction", type=float, default=0.03)
     parser.add_argument("--min-lr-ratio", type=float, default=0.1)
     parser.add_argument("--bigram-device", default=None, help="Device to store the bigram buffer, e.g. 'cuda:1' or 'cpu'. Frees ~1 GB on the training GPU.")
+    parser.add_argument("--entropy-weight", type=float, default=0.0, help="Coefficient for mixture-entropy regularisation (e.g. 0.1). Resists component collapse.")
     return parser.parse_args()
 
 
@@ -154,7 +155,7 @@ def main() -> None:
             set_optimizer_lr(optimizer, lr_now)
             optimizer.zero_grad(set_to_none=True)
             logits = model(batch_contexts, batch_prev, batch_prev2)
-            loss = cross_entropy_with_l2(model, logits, batch_targets)
+            loss = cross_entropy_with_l2(model, logits, batch_targets, entropy_weight=args.entropy_weight)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()

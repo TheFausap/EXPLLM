@@ -299,7 +299,21 @@ def device_for_training(requested: str = "auto") -> torch.device:
     return torch.device(requested)
 
 
-def cross_entropy_with_l2(model: QALFModel, logits: torch.Tensor, targets: torch.Tensor, l2_weight: float = 1e-5) -> torch.Tensor:
+def cross_entropy_with_l2(
+    model: QALFModel,
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    l2_weight: float = 1e-5,
+    entropy_weight: float = 0.0,
+) -> torch.Tensor:
     loss = F.cross_entropy(logits, targets)
     relation_energy = model.memory.real.square().mean() + model.memory.imag.square().mean()
-    return loss + l2_weight * relation_energy
+    loss = loss + l2_weight * relation_energy
+    if entropy_weight > 0.0:
+        comp_mix = torch.softmax(model.component_logits, dim=0)
+        comp_entropy = -(comp_mix * comp_mix.clamp_min(1e-8).log()).sum()
+        rel_mix = torch.softmax(model.memory.mixing_logits, dim=0)
+        rel_entropy = -(rel_mix * rel_mix.clamp_min(1e-8).log()).sum()
+        # subtract entropy to maximise it (resist collapse of both mixture distributions)
+        loss = loss - entropy_weight * (comp_entropy + rel_entropy)
+    return loss
