@@ -159,6 +159,11 @@ def main() -> None:
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
+            # keep log-strengths above log(0.01) so they can't collapse to zero;
+            # done post-step so gradients are never zeroed by clamping
+            with torch.no_grad():
+                model.log_bigram_strength.clamp_(min=math.log(0.01))
+                model.log_trigram_strength.clamp_(min=math.log(0.01))
             global_step += 1
             total_loss += float(loss.detach().cpu()) * batch_targets.numel()
             seen += batch_targets.numel()

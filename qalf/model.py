@@ -179,11 +179,9 @@ class QALFModel(nn.Module):
         logits = torch.logsumexp(born_logits + mix_log[None, :, None], dim=1) + self.output_bias[None, :]
         if prev_ids is not None:
             bg = self.bigram_logits[prev_ids.to(self.bigram_logits.device)].to(logits.device)
-            bigram_str = self.log_bigram_strength.exp().clamp(0.01, 5.0)
-            logits = logits + bigram_str * bg
+            logits = logits + self.log_bigram_strength.exp() * bg
             if prev2_ids is not None:
-                trigram_str = self.log_trigram_strength.exp().clamp(0.01, 5.0)
-                logits = logits + trigram_str * self.trigram_logits_for(prev2_ids, prev_ids)
+                logits = logits + self.log_trigram_strength.exp() * self.trigram_logits_for(prev2_ids, prev_ids)
         return logits
 
     @torch.no_grad()
@@ -197,8 +195,8 @@ class QALFModel(nn.Module):
             "context_norm_mean": float(torch.linalg.vector_norm(self.context_state(context_ids), dim=-1).mean().cpu()),
             "component_entropy": float(entropy.detach().cpu()),
             "components": float(self.config.num_components),
-            "bigram_strength": float(self.log_bigram_strength.exp().detach().cpu()),
-            "trigram_strength": float(self.log_trigram_strength.exp().detach().cpu()),
+            "bigram_strength": float(self.log_bigram_strength.clamp(min=math.log(0.01)).exp().detach().cpu()),
+            "trigram_strength": float(self.log_trigram_strength.clamp(min=math.log(0.01)).exp().detach().cpu()),
         }
 
     @torch.no_grad()
