@@ -11,7 +11,7 @@ paper about the idea.
 
 ## Environment
 
-The user-provided Conda environment is named `EXPLLM`.
+The Conda environment is named `EXPLLM`.
 
 ```bash
 conda run -n EXPLLM python -m qalf.train --data data/seed_corpus.jsonl --out runs/qalf_poc
