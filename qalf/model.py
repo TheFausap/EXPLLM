@@ -80,6 +80,12 @@ class QALFModel(nn.Module):
         self.phase_frequencies = nn.Parameter(torch.linspace(0.05, 1.25, config.dimension))
         self.component_logits = nn.Parameter(torch.zeros(config.num_components))
         self.component_phase_offsets = nn.Parameter(torch.linspace(0.0, 1.0, config.num_components))
+        # Learnable positional focus: each component learns where in the context to look
+        self.component_centers = nn.Parameter(torch.linspace(0.0, 1.0, config.num_components))
+        self.component_log_widths = nn.Parameter(torch.full((config.num_components,), math.log(0.5)))
+        # Learnable n-gram blend: model learns how much to trust Born vs. n-gram priors
+        self.log_bigram_strength = nn.Parameter(torch.tensor(math.log(max(config.bigram_strength, 1e-6))))
+        self.log_trigram_strength = nn.Parameter(torch.tensor(math.log(max(config.trigram_strength, 1e-6))))
         self.output_bias = nn.Parameter(torch.zeros(config.vocab_size))
         if bigram_logits is None:
             bigram_logits = torch.zeros(config.vocab_size, config.vocab_size, dtype=torch.float32)
@@ -96,20 +102,13 @@ class QALFModel(nn.Module):
 
     def component_weights(self, context_ids: torch.Tensor) -> torch.Tensor:
         batch, length = context_ids.shape
-        device = context_ids.device
-        positions = torch.linspace(0.0, 1.0, length, device=device)
-        components: list[torch.Tensor] = []
-        components.append(torch.linspace(0.35, 1.0, length, device=device))
-        components.append(torch.exp(-5.0 * (1.0 - positions)))
-        components.append(torch.exp(-2.2 * positions))
-        components.append(0.55 + 0.45 * torch.sin(torch.pi * positions).clamp_min(0.0))
-        for idx in range(4, self.config.num_components):
-            center = (idx - 3) / max(self.config.num_components - 3, 1)
-            components.append(torch.exp(-16.0 * (positions - center).square()))
-        weights = torch.stack(components[: self.config.num_components], dim=0)
+        positions = torch.linspace(0.0, 1.0, length, device=context_ids.device)
+        centers = torch.sigmoid(self.component_centers)           # (num_components,) in [0, 1]
+        widths = self.component_log_widths.exp().clamp_min(0.05)  # (num_components,) positive
+        # Gaussian focus window per component: (num_components, length)
+        weights = torch.exp(-0.5 * ((positions[None, :] - centers[:, None]) / widths[:, None]).square())
         mask = context_ids.ne(self.config.pad_id).float()
-        weights = weights[None, :, :] * mask[:, None, :]
-        return weights
+        return weights[None, :, :] * mask[:, None, :]
 
     def context_components(self, context_ids: torch.Tensor) -> torch.Tensor:
         states = self.lexicon()
@@ -180,9 +179,9 @@ class QALFModel(nn.Module):
         logits = torch.logsumexp(born_logits + mix_log[None, :, None], dim=1) + self.output_bias[None, :]
         if prev_ids is not None:
             bg = self.bigram_logits[prev_ids.to(self.bigram_logits.device)].to(logits.device)
-            logits = logits + self.config.bigram_strength * bg
+            logits = logits + self.log_bigram_strength.exp() * bg
             if prev2_ids is not None:
-                logits = logits + self.config.trigram_strength * self.trigram_logits_for(prev2_ids, prev_ids)
+                logits = logits + self.log_trigram_strength.exp() * self.trigram_logits_for(prev2_ids, prev_ids)
         return logits
 
     @torch.no_grad()
@@ -196,6 +195,8 @@ class QALFModel(nn.Module):
             "context_norm_mean": float(torch.linalg.vector_norm(self.context_state(context_ids), dim=-1).mean().cpu()),
             "component_entropy": float(entropy.detach().cpu()),
             "components": float(self.config.num_components),
+            "bigram_strength": float(self.log_bigram_strength.exp().detach().cpu()),
+            "trigram_strength": float(self.log_trigram_strength.exp().detach().cpu()),
         }
 
     @torch.no_grad()
