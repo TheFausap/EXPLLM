@@ -39,6 +39,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trigram-strength", type=float, default=0.75)
     parser.add_argument("--bigram-strength", type=float, default=0.35)
     parser.add_argument("--resume", default=None, help="Resume from a QALF checkpoint with training_state")
+    parser.add_argument("--reset-optimizer", action="store_true", help="Discard the saved optimizer state on resume (needed when model architecture changed)")
     parser.add_argument("--save-every", type=int, default=0, help="Save checkpoint_epoch_N.pt every N epochs")
     parser.add_argument("--lr-schedule", choices=["constant", "warmup-cosine"], default="constant")
     parser.add_argument("--warmup-fraction", type=float, default=0.03)
@@ -135,7 +136,7 @@ def main() -> None:
     dataset = TensorDataset(contexts, prev2_tokens, prev_tokens, targets)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    if resumed_training_state.get("optimizer_state"):
+    if resumed_training_state.get("optimizer_state") and not args.reset_optimizer:
         optimizer.load_state_dict(resumed_training_state["optimizer_state"])
         for group in optimizer.param_groups:
             group["lr"] = args.lr
