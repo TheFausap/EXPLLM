@@ -37,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trigram-top-k", type=int, default=32)
     parser.add_argument("--trigram-min-count", type=int, default=2)
     parser.add_argument("--trigram-strength", type=float, default=0.75)
+    parser.add_argument("--bigram-strength", type=float, default=0.35)
     parser.add_argument("--resume", default=None, help="Resume from a QALF checkpoint with training_state")
     parser.add_argument("--save-every", type=int, default=0, help="Save checkpoint_epoch_N.pt every N epochs")
     parser.add_argument("--lr-schedule", choices=["constant", "warmup-cosine"], default="constant")
@@ -95,6 +96,7 @@ def main() -> None:
             context_size=args.context_size,
             num_relations=args.relations,
             num_components=args.components,
+            bigram_strength=args.bigram_strength,
             trigram_strength=args.trigram_strength,
             pad_id=tokenizer.pad_id,
         )
