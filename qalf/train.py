@@ -40,6 +40,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bigram-strength", type=float, default=0.35)
     parser.add_argument("--resume", default=None, help="Resume from a QALF checkpoint with training_state")
     parser.add_argument("--reset-optimizer", action="store_true", help="Discard the saved optimizer state on resume (needed when model architecture changed)")
+    parser.add_argument("--reset-lr-schedule", action="store_true", help="Reset the LR schedule position to 0 on resume, so warmup fires again")
     parser.add_argument("--save-every", type=int, default=0, help="Save checkpoint_epoch_N.pt every N epochs")
     parser.add_argument("--lr-schedule", choices=["constant", "warmup-cosine"], default="constant")
     parser.add_argument("--warmup-fraction", type=float, default=0.03)
@@ -147,7 +148,8 @@ def main() -> None:
     steps_per_epoch = len(loader)
     total_steps = max(steps_per_epoch * args.epochs, 1)
     global_step = int(resumed_training_state.get("global_step", max(start_epoch - 1, 0) * steps_per_epoch))
-    logger.emit({"stage": "lr_schedule", "schedule": args.lr_schedule, "base_lr": args.lr, "warmup_fraction": args.warmup_fraction, "min_lr_ratio": args.min_lr_ratio, "start_global_step": global_step, "total_steps": total_steps, "steps_per_epoch": steps_per_epoch})
+    lr_step = 0 if args.reset_lr_schedule else global_step
+    logger.emit({"stage": "lr_schedule", "schedule": args.lr_schedule, "base_lr": args.lr, "warmup_fraction": args.warmup_fraction, "min_lr_ratio": args.min_lr_ratio, "start_global_step": global_step, "start_lr_step": lr_step, "total_steps": total_steps, "steps_per_epoch": steps_per_epoch})
     history: list[dict[str, float]] = list(resumed_metadata.get("history", []))
     for epoch in range(start_epoch, args.epochs + 1):
         total_loss = 0.0
@@ -157,7 +159,7 @@ def main() -> None:
             batch_prev2 = batch_prev2.to(device)
             batch_prev = batch_prev.to(device)
             batch_targets = batch_targets.to(device)
-            lr_now = scheduled_lr(args.lr, global_step, total_steps, args.lr_schedule, args.warmup_fraction, args.min_lr_ratio)
+            lr_now = scheduled_lr(args.lr, lr_step, total_steps, args.lr_schedule, args.warmup_fraction, args.min_lr_ratio)
             set_optimizer_lr(optimizer, lr_now)
             optimizer.zero_grad(set_to_none=True)
             logits = model(batch_contexts, batch_prev, batch_prev2)
@@ -166,6 +168,7 @@ def main() -> None:
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
             global_step += 1
+            lr_step += 1
             total_loss += float(loss.detach().cpu()) * batch_targets.numel()
             seen += batch_targets.numel()
         avg_loss = total_loss / max(seen, 1)
