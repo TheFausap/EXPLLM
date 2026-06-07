@@ -83,9 +83,6 @@ class QALFModel(nn.Module):
         # Learnable positional focus: each component learns where in the context to look
         self.component_centers = nn.Parameter(torch.linspace(0.0, 1.0, config.num_components))
         self.component_log_widths = nn.Parameter(torch.full((config.num_components,), math.log(0.5)))
-        # Learnable n-gram blend: model learns how much to trust Born vs. n-gram priors
-        self.log_bigram_strength = nn.Parameter(torch.tensor(math.log(max(config.bigram_strength, 1e-6))))
-        self.log_trigram_strength = nn.Parameter(torch.tensor(math.log(max(config.trigram_strength, 1e-6))))
         self.output_bias = nn.Parameter(torch.zeros(config.vocab_size))
         if bigram_logits is None:
             bigram_logits = torch.zeros(config.vocab_size, config.vocab_size, dtype=torch.float32)
@@ -179,9 +176,9 @@ class QALFModel(nn.Module):
         logits = torch.logsumexp(born_logits + mix_log[None, :, None], dim=1) + self.output_bias[None, :]
         if prev_ids is not None:
             bg = self.bigram_logits[prev_ids.to(self.bigram_logits.device)].to(logits.device)
-            logits = logits + self.log_bigram_strength.exp() * bg
+            logits = logits + self.config.bigram_strength * bg
             if prev2_ids is not None:
-                logits = logits + self.log_trigram_strength.exp() * self.trigram_logits_for(prev2_ids, prev_ids)
+                logits = logits + self.config.trigram_strength * self.trigram_logits_for(prev2_ids, prev_ids)
         return logits
 
     @torch.no_grad()
@@ -195,8 +192,8 @@ class QALFModel(nn.Module):
             "context_norm_mean": float(torch.linalg.vector_norm(self.context_state(context_ids), dim=-1).mean().cpu()),
             "component_entropy": float(entropy.detach().cpu()),
             "components": float(self.config.num_components),
-            "bigram_strength": float(self.log_bigram_strength.clamp(min=math.log(0.01)).exp().detach().cpu()),
-            "trigram_strength": float(self.log_trigram_strength.clamp(min=math.log(0.01)).exp().detach().cpu()),
+            "bigram_strength": self.config.bigram_strength,
+            "trigram_strength": self.config.trigram_strength,
         }
 
     @torch.no_grad()
