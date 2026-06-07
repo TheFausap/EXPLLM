@@ -88,6 +88,9 @@ def main() -> None:
         model, tokenizer, resumed_metadata = load_checkpoint(args.resume, map_location="cpu")
         resumed_training_state = resumed_payload.get("training_state", {})
         config = model.config
+        # CLI args override checkpoint config for values that don't affect weight shapes
+        config.bigram_strength = args.bigram_strength
+        config.trigram_strength = args.trigram_strength
         logger.emit({"stage": "resume_checkpoint", "checkpoint": args.resume, "start_epoch": int(resumed_training_state.get("epoch", 0)) + 1, "vocab": len(tokenizer.vocab)})
     else:
         tokenizer = build_tokenizer(examples, vocab_size=args.vocab_size)
