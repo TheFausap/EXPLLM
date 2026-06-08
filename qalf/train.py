@@ -74,6 +74,40 @@ def set_optimizer_lr(optimizer: torch.optim.Optimizer, lr: float) -> None:
         group["lr"] = lr
 
 
+_BUFFER_KEYS = frozenset({"bigram_logits", "trigram_keys", "trigram_token_ids", "trigram_token_logits"})
+
+
+def _restore_exp_avg_sq(
+    optimizer: torch.optim.Adam,
+    saved_opt_state: dict,
+    saved_model_state: dict,
+    model: "QALFModel",
+) -> int:
+    """Partial optimizer restore for architecture-mismatched checkpoints.
+
+    Copies exp_avg_sq (gradient scale) from the saved state to the current optimizer
+    for parameters that exist in both versions, matched by name. exp_avg is zeroed
+    to clear stale direction bias. New parameters start with fresh state.
+    Returns the number of parameters restored.
+    """
+    saved_param_names = [k for k in saved_model_state if k not in _BUFFER_KEYS]
+    saved_states = saved_opt_state.get("state", {})
+    name_to_saved = {name: saved_states[i] for i, name in enumerate(saved_param_names) if i in saved_states}
+    restored = 0
+    for name, param in model.named_parameters():
+        s = name_to_saved.get(name)
+        if s is None or "exp_avg_sq" not in s:
+            continue
+        step = s.get("step", torch.tensor(0.0))
+        optimizer.state[param] = {
+            "step": step.clone() if isinstance(step, torch.Tensor) else torch.tensor(float(step)),
+            "exp_avg": torch.zeros_like(param.data),
+            "exp_avg_sq": s["exp_avg_sq"].clone().to(param.device),
+        }
+        restored += 1
+    return restored
+
+
 def main() -> None:
     args = parse_args()
     random.seed(args.seed)
@@ -145,10 +179,18 @@ def main() -> None:
     dataset = TensorDataset(contexts, prev2_tokens, prev_tokens, targets)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
-    if resumed_training_state.get("optimizer_state") and not args.reset_optimizer:
-        optimizer.load_state_dict(resumed_training_state["optimizer_state"])
-        for group in optimizer.param_groups:
-            group["lr"] = args.lr
+    if resumed_training_state.get("optimizer_state"):
+        if not args.reset_optimizer:
+            try:
+                optimizer.load_state_dict(resumed_training_state["optimizer_state"])
+                for group in optimizer.param_groups:
+                    group["lr"] = args.lr
+            except ValueError:
+                n = _restore_exp_avg_sq(optimizer, resumed_training_state["optimizer_state"], resumed_payload["model_state"], model)
+                logger.emit({"stage": "partial_optimizer_restore", "reason": "architecture_mismatch", "parameters_restored": n})
+        else:
+            n = _restore_exp_avg_sq(optimizer, resumed_training_state["optimizer_state"], resumed_payload["model_state"], model)
+            logger.emit({"stage": "partial_optimizer_restore", "reason": "reset_optimizer", "parameters_restored": n})
     start_epoch = int(resumed_training_state.get("epoch", 0)) + 1
     steps_per_epoch = len(loader)
     total_steps = max(steps_per_epoch * args.epochs, 1)
