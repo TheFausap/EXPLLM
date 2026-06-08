@@ -9,6 +9,7 @@ import random
 from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, TensorDataset
 
 from qalf.data import build_tokenizer, encode_examples, make_windows, read_jsonl, relation_counts, trigram_counts
@@ -203,6 +204,18 @@ def main() -> None:
     lr_step = 0 if args.reset_lr_schedule else global_step
     logger.emit({"stage": "lr_schedule", "schedule": args.lr_schedule, "base_lr": args.lr, "warmup_fraction": args.warmup_fraction, "min_lr_ratio": args.min_lr_ratio, "start_global_step": global_step, "start_lr_step": lr_step, "total_steps": total_steps, "steps_per_epoch": steps_per_epoch})
     history: list[dict[str, float]] = list(resumed_metadata.get("history", []))
+    if args.resume:
+        model.eval()
+        pre_loss, pre_seen = 0.0, 0
+        with torch.no_grad():
+            for i, (bc, bp2, bp, bt) in enumerate(loader):
+                if i >= 20:
+                    break
+                logits = model(bc.to(device), bp.to(device), bp2.to(device))
+                pre_loss += float(F.cross_entropy(logits, bt.to(device)).cpu()) * bt.numel()
+                pre_seen += bt.numel()
+        logger.emit({"stage": "resume_eval", "ce_loss": pre_loss / max(pre_seen, 1), "batches": min(20, len(loader))})
+        model.train()
     for epoch in range(start_epoch, args.epochs + 1):
         total_loss = 0.0
         seen = 0
