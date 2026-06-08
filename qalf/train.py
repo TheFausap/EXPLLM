@@ -92,7 +92,12 @@ def main() -> None:
         # CLI args override checkpoint config for values that don't affect weight shapes
         config.bigram_strength = args.bigram_strength
         config.trigram_strength = args.trigram_strength
-        logger.emit({"stage": "resume_checkpoint", "checkpoint": args.resume, "start_epoch": int(resumed_training_state.get("epoch", 0)) + 1, "vocab": len(tokenizer.vocab)})
+        last_lr = None
+        if resumed_training_state.get("optimizer_state"):
+            groups = resumed_training_state["optimizer_state"].get("param_groups", [])
+            if groups:
+                last_lr = groups[0].get("lr")
+        logger.emit({"stage": "resume_checkpoint", "checkpoint": args.resume, "start_epoch": int(resumed_training_state.get("epoch", 0)) + 1, "vocab": len(tokenizer.vocab), "checkpoint_last_lr": last_lr})
     else:
         tokenizer = build_tokenizer(examples, vocab_size=args.vocab_size)
         config = QALFConfig(
