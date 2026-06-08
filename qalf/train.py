@@ -182,7 +182,7 @@ def main() -> None:
             total_loss += float(loss.detach().cpu()) * batch_targets.numel()
             seen += batch_targets.numel()
         avg_loss = total_loss / max(seen, 1)
-        if epoch == 1 or epoch % args.log_every == 0 or epoch == args.epochs:
+        if epoch == 1 or epoch == start_epoch or epoch % args.log_every == 0 or epoch == args.epochs:
             diag_contexts = contexts[: min(16, len(contexts))].to(device)
             diag = model.diagnostics(diag_contexts)
             record = {"epoch": epoch, "loss": avg_loss, "lr": optimizer.param_groups[0]["lr"], "global_step": global_step, **diag}
