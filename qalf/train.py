@@ -148,6 +148,11 @@ def main() -> None:
     steps_per_epoch = len(loader)
     total_steps = max(steps_per_epoch * args.epochs, 1)
     global_step = int(resumed_training_state.get("global_step", max(start_epoch - 1, 0) * steps_per_epoch))
+    if args.reset_lr_schedule and args.resume:
+        # Calibrate the schedule to the remaining epochs so warmup/cosine covers
+        # actual training time rather than the full epoch range from epoch 0.
+        remaining_epochs = max(args.epochs - start_epoch + 1, 1)
+        total_steps = max(steps_per_epoch * remaining_epochs, 1)
     lr_step = 0 if args.reset_lr_schedule else global_step
     logger.emit({"stage": "lr_schedule", "schedule": args.lr_schedule, "base_lr": args.lr, "warmup_fraction": args.warmup_fraction, "min_lr_ratio": args.min_lr_ratio, "start_global_step": global_step, "start_lr_step": lr_step, "total_steps": total_steps, "steps_per_epoch": steps_per_epoch})
     history: list[dict[str, float]] = list(resumed_metadata.get("history", []))
