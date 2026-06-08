@@ -39,6 +39,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trigram-min-count", type=int, default=2)
     parser.add_argument("--trigram-strength", type=float, default=0.75)
     parser.add_argument("--bigram-strength", type=float, default=0.35)
+    parser.add_argument("--bigram-decay-epochs", type=int, default=0, help="Linearly decay bigram strength to 0 over this many epochs from the first training epoch. 0 = constant.")
+    parser.add_argument("--trigram-decay-epochs", type=int, default=0, help="Linearly decay trigram strength to 0 over this many epochs from the first training epoch. 0 = constant.")
     parser.add_argument("--resume", default=None, help="Resume from a QALF checkpoint with training_state")
     parser.add_argument("--reset-optimizer", action="store_true", help="Discard the saved optimizer state on resume (needed when model architecture changed)")
     parser.add_argument("--reset-lr-schedule", action="store_true", help="Reset the LR schedule position to 0 on resume, so warmup fires again")
@@ -217,6 +219,12 @@ def main() -> None:
         logger.emit({"stage": "resume_eval", "ce_loss": pre_loss / max(pre_seen, 1), "batches": min(20, len(loader))})
         model.train()
     for epoch in range(start_epoch, args.epochs + 1):
+        if args.bigram_decay_epochs > 0:
+            t = max(0.0, min(1.0, (epoch - start_epoch) / args.bigram_decay_epochs))
+            model.config.bigram_strength = args.bigram_strength * (1.0 - t)
+        if args.trigram_decay_epochs > 0:
+            t = max(0.0, min(1.0, (epoch - start_epoch) / args.trigram_decay_epochs))
+            model.config.trigram_strength = args.trigram_strength * (1.0 - t)
         total_loss = 0.0
         seen = 0
         for batch_contexts, batch_prev2, batch_prev, batch_targets in loader:
