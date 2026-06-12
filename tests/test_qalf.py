@@ -58,6 +58,16 @@ class QALFInvariantTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(loss))
         self.assertGreaterEqual(float(loss.detach()), 0.0)
 
+
+    def test_component_mixture_respects_minimum_weight(self):
+        self.model.config.component_min_weight = 0.08
+        mix = self.model.component_mixture()
+        self.assertTrue(torch.all(mix >= 0.08 - 1e-6))
+        self.assertTrue(torch.allclose(mix.sum(), torch.tensor(1.0), atol=1e-6))
+        diagnostics = self.model.diagnostics(make_windows(self.encoded, self.model.config.context_size, self.tokenizer.pad_id)[0][:4])
+        self.assertGreaterEqual(diagnostics["component_weight_min"], 0.08 - 1e-6)
+        self.assertLessEqual(diagnostics["component_weight_max"], 1.0)
+
     def test_save_load_preserves_generation_with_seed(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "model.pt"

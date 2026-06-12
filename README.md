@@ -132,6 +132,8 @@ conda run -n EXPLLM python -m qalf.train \
   --entropy-weight 0.02 \
   --component-diversity-weight 0.1 \
   --component-diversity-target 0.05 \
+  --component-temperature 2.0 \
+  --component-min-weight 0.08 \
   --attractor-limit 2000 \
   --log-every 2 \
   --log-file runs/qalf_dgx_heavy/train.jsonl
@@ -214,7 +216,8 @@ phase-weighted context components. In logs, early `purity_mean` should be below
 `1.0`, but the stronger sanity check is that `component_overlap_mean` stays low
 and `density_effective_rank` does not collapse back to `1.0`. If purity rises
 toward `1.0` while `component_entropy` remains high, the components have aligned
-and the run needs component-diversity regularisation.
+and the run needs either stronger regularisation or a mixture floor such as
+`--component-min-weight 0.08`.
 
 Short comparison run first:
 
@@ -240,6 +243,8 @@ conda run -n EXPLLM python -m qalf.train \
   --entropy-weight 0.02 \
   --component-diversity-weight 0.1 \
   --component-diversity-target 0.05 \
+  --component-temperature 2.0 \
+  --component-min-weight 0.08 \
   --attractor-limit 2000 \
   --save-every 2 \
   --log-every 1 \

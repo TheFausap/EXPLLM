@@ -52,6 +52,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--entropy-weight", type=float, default=0.0, help="Coefficient for mixture-entropy regularisation (e.g. 0.1). Resists mixture-weight collapse.")
     parser.add_argument("--component-diversity-weight", type=float, default=0.0, help="Penalty for high pairwise overlap between mixed context components. Try 0.05-0.2 if purity collapses to 1.")
     parser.add_argument("--component-diversity-target", type=float, default=0.05, help="Allowed squared overlap between component states before the diversity penalty activates.")
+    parser.add_argument("--component-temperature", type=float, default=1.0, help="Temperature for component mixture logits. Higher values keep component weights flatter.")
+    parser.add_argument("--component-min-weight", type=float, default=0.0, help="Hard minimum mixture weight per component. Example: 0.08 with 6 components keeps at least 48%% mass spread across all components.")
     return parser.parse_args()
 
 
@@ -131,6 +133,8 @@ def main() -> None:
         # CLI args override checkpoint config for values that don't affect weight shapes
         config.bigram_strength = args.bigram_strength
         config.trigram_strength = args.trigram_strength
+        config.component_temperature = args.component_temperature
+        config.component_min_weight = args.component_min_weight
         last_lr = None
         if resumed_training_state.get("optimizer_state"):
             groups = resumed_training_state["optimizer_state"].get("param_groups", [])
@@ -148,6 +152,8 @@ def main() -> None:
             bigram_strength=args.bigram_strength,
             trigram_strength=args.trigram_strength,
             pad_id=tokenizer.pad_id,
+            component_temperature=args.component_temperature,
+            component_min_weight=args.component_min_weight,
         )
         model = None
         logger.emit({"stage": "build_tokenizer", "vocab": len(tokenizer.vocab)})
@@ -207,7 +213,14 @@ def main() -> None:
         total_steps = max(steps_per_epoch * remaining_epochs, 1)
     lr_step = 0 if args.reset_lr_schedule else global_step
     logger.emit({"stage": "lr_schedule", "schedule": args.lr_schedule, "base_lr": args.lr, "warmup_fraction": args.warmup_fraction, "min_lr_ratio": args.min_lr_ratio, "start_global_step": global_step, "start_lr_step": lr_step, "total_steps": total_steps, "steps_per_epoch": steps_per_epoch})
-    logger.emit({"stage": "regularization", "entropy_weight": args.entropy_weight, "component_diversity_weight": args.component_diversity_weight, "component_diversity_target": args.component_diversity_target})
+    logger.emit({
+        "stage": "regularization",
+        "entropy_weight": args.entropy_weight,
+        "component_diversity_weight": args.component_diversity_weight,
+        "component_diversity_target": args.component_diversity_target,
+        "component_temperature": args.component_temperature,
+        "component_min_weight": args.component_min_weight,
+    })
     history: list[dict[str, float]] = list(resumed_metadata.get("history", []))
     if args.resume:
         model.eval()
@@ -278,6 +291,8 @@ def main() -> None:
                         "entropy_weight": args.entropy_weight,
                         "component_diversity_weight": args.component_diversity_weight,
                         "component_diversity_target": args.component_diversity_target,
+                        "component_temperature": args.component_temperature,
+                        "component_min_weight": args.component_min_weight,
                     },
                 },
                 training_state={"epoch": epoch, "global_step": global_step, "optimizer_state": optimizer.state_dict()},
@@ -302,6 +317,8 @@ def main() -> None:
             "entropy_weight": args.entropy_weight,
             "component_diversity_weight": args.component_diversity_weight,
             "component_diversity_target": args.component_diversity_target,
+            "component_temperature": args.component_temperature,
+            "component_min_weight": args.component_min_weight,
         },
     }
     save_checkpoint(out_dir / "model.pt", model.cpu(), tokenizer, metadata, training_state={"epoch": args.epochs, "global_step": global_step, "optimizer_state": optimizer.state_dict()})

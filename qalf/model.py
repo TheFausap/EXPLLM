@@ -27,6 +27,8 @@ class QALFConfig:
     bigram_strength: float = 0.35
     trigram_strength: float = 0.75
     pad_id: int = 0
+    component_temperature: float = 1.0
+    component_min_weight: float = 0.0
 
 
 class QuantumLexicon(nn.Module):
@@ -97,6 +99,17 @@ class QALFModel(nn.Module):
         self.register_buffer("trigram_token_ids", trigram_prior["token_ids"].long())
         self.register_buffer("trigram_token_logits", trigram_prior["token_logits"].float())
 
+    def component_mixture(self) -> torch.Tensor:
+        temperature = max(float(self.config.component_temperature), 1e-4)
+        mix = torch.softmax(self.component_logits / temperature, dim=0)
+        floor = max(float(self.config.component_min_weight), 0.0)
+        max_floor = 1.0 / max(self.config.num_components, 1)
+        floor = min(floor, max_floor)
+        if floor > 0.0:
+            mix = mix * (1.0 - floor * self.config.num_components) + floor
+            mix = mix / mix.sum().clamp_min(1e-8)
+        return mix
+
     def component_weights(self, context_ids: torch.Tensor) -> torch.Tensor:
         batch, length = context_ids.shape
         positions = torch.linspace(0.0, 1.0, length, device=context_ids.device)
@@ -127,12 +140,12 @@ class QALFModel(nn.Module):
         return normalize_complex(components)
 
     def context_state(self, context_ids: torch.Tensor) -> torch.Tensor:
-        mix = torch.softmax(self.component_logits, dim=0).to(self.context_components(context_ids).dtype)
+        mix = self.component_mixture().to(self.context_components(context_ids).dtype)
         return normalize_complex(torch.einsum("c,bcd->bd", mix, self.context_components(context_ids)))
 
     def density(self, context_ids: torch.Tensor) -> torch.Tensor:
         components = self.context_components(context_ids)
-        mix = torch.softmax(self.component_logits, dim=0).to(components.dtype)
+        mix = self.component_mixture().to(components.dtype)
         projectors = components.unsqueeze(-1) * components.conj().unsqueeze(-2)
         rho = torch.einsum("c,bcde->bde", mix, projectors)
         trace = torch.diagonal(rho, dim1=-2, dim2=-1).sum(dim=-1).real.clamp_min(1e-8)
@@ -172,7 +185,7 @@ class QALFModel(nn.Module):
         related = related.reshape(batch, num_components, dim)
         amplitudes = torch.einsum("bcd,vd->bcv", related, token_states.conj())
         born_logits = torch.log(amplitudes.abs().square().clamp_min(1e-8))
-        mix_log = torch.log_softmax(self.component_logits, dim=0).to(born_logits.dtype)
+        mix_log = self.component_mixture().clamp_min(1e-8).log().to(born_logits.dtype)
         logits = torch.logsumexp(born_logits + mix_log[None, :, None], dim=1) + self.output_bias[None, :]
         if prev_ids is not None:
             bg = self.bigram_logits[prev_ids.to(self.bigram_logits.device)].to(logits.device)
@@ -188,7 +201,7 @@ class QALFModel(nn.Module):
         components = self.context_components(context_ids)
         overlap = component_overlap_matrix(components)
         offdiag = offdiagonal_values(overlap)
-        mix = torch.softmax(self.component_logits, dim=0)
+        mix = self.component_mixture()
         entropy = -(mix * mix.clamp_min(1e-8).log()).sum()
         return {
             "trace_mean": float(trace_real(rho).mean().cpu()),
@@ -197,6 +210,8 @@ class QALFModel(nn.Module):
             "context_norm_mean": float(torch.linalg.vector_norm(self.context_state(context_ids), dim=-1).mean().cpu()),
             "component_entropy": float(entropy.detach().cpu()),
             "component_effective_count": float(torch.exp(entropy).detach().cpu()),
+            "component_weight_min": float(mix.min().detach().cpu()),
+            "component_weight_max": float(mix.max().detach().cpu()),
             "component_overlap_mean": float(offdiag.mean().cpu()) if offdiag.numel() else 0.0,
             "component_overlap_max": float(offdiag.max().cpu()) if offdiag.numel() else 0.0,
             "components": float(self.config.num_components),
@@ -346,7 +361,7 @@ def cross_entropy_with_l2(
     relation_energy = model.memory.real.square().mean() + model.memory.imag.square().mean()
     loss = loss + l2_weight * relation_energy
     if entropy_weight > 0.0:
-        comp_mix = torch.softmax(model.component_logits, dim=0)
+        comp_mix = model.component_mixture()
         comp_entropy = -(comp_mix * comp_mix.clamp_min(1e-8).log()).sum()
         rel_mix = torch.softmax(model.memory.mixing_logits, dim=0)
         rel_entropy = -(rel_mix * rel_mix.clamp_min(1e-8).log()).sum()
