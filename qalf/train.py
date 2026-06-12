@@ -49,7 +49,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--warmup-fraction", type=float, default=0.03)
     parser.add_argument("--min-lr-ratio", type=float, default=0.1)
     parser.add_argument("--bigram-device", default=None, help="Device to store the bigram buffer, e.g. 'cuda:1' or 'cpu'. Frees ~1 GB on the training GPU.")
-    parser.add_argument("--entropy-weight", type=float, default=0.0, help="Coefficient for mixture-entropy regularisation (e.g. 0.1). Resists component collapse.")
+    parser.add_argument("--entropy-weight", type=float, default=0.0, help="Coefficient for mixture-entropy regularisation (e.g. 0.1). Resists mixture-weight collapse.")
+    parser.add_argument("--component-diversity-weight", type=float, default=0.0, help="Penalty for high pairwise overlap between mixed context components. Try 0.05-0.2 if purity collapses to 1.")
+    parser.add_argument("--component-diversity-target", type=float, default=0.05, help="Allowed squared overlap between component states before the diversity penalty activates.")
     return parser.parse_args()
 
 
@@ -205,6 +207,7 @@ def main() -> None:
         total_steps = max(steps_per_epoch * remaining_epochs, 1)
     lr_step = 0 if args.reset_lr_schedule else global_step
     logger.emit({"stage": "lr_schedule", "schedule": args.lr_schedule, "base_lr": args.lr, "warmup_fraction": args.warmup_fraction, "min_lr_ratio": args.min_lr_ratio, "start_global_step": global_step, "start_lr_step": lr_step, "total_steps": total_steps, "steps_per_epoch": steps_per_epoch})
+    logger.emit({"stage": "regularization", "entropy_weight": args.entropy_weight, "component_diversity_weight": args.component_diversity_weight, "component_diversity_target": args.component_diversity_target})
     history: list[dict[str, float]] = list(resumed_metadata.get("history", []))
     if args.resume:
         model.eval()
@@ -236,7 +239,15 @@ def main() -> None:
             set_optimizer_lr(optimizer, lr_now)
             optimizer.zero_grad(set_to_none=True)
             logits = model(batch_contexts, batch_prev, batch_prev2)
-            loss = cross_entropy_with_l2(model, logits, batch_targets, entropy_weight=args.entropy_weight)
+            loss = cross_entropy_with_l2(
+                model,
+                logits,
+                batch_targets,
+                entropy_weight=args.entropy_weight,
+                component_context_ids=batch_contexts,
+                component_diversity_weight=args.component_diversity_weight,
+                component_diversity_target=args.component_diversity_target,
+            )
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
@@ -256,7 +267,19 @@ def main() -> None:
                 out_dir / f"checkpoint_epoch_{epoch}.pt",
                 model.cpu(),
                 tokenizer,
-                metadata={"data": args.data, "device": str(device), "epochs": args.epochs, "examples": len(examples), "windows": int(targets.numel()), "history": history},
+                metadata={
+                    "data": args.data,
+                    "device": str(device),
+                    "epochs": args.epochs,
+                    "examples": len(examples),
+                    "windows": int(targets.numel()),
+                    "history": history,
+                    "regularization": {
+                        "entropy_weight": args.entropy_weight,
+                        "component_diversity_weight": args.component_diversity_weight,
+                        "component_diversity_target": args.component_diversity_target,
+                    },
+                },
                 training_state={"epoch": epoch, "global_step": global_step, "optimizer_state": optimizer.state_dict()},
             )
             model.to(device)
@@ -275,6 +298,11 @@ def main() -> None:
         "attractor_limit": args.attractor_limit,
         "windows": int(targets.numel()),
         "history": history,
+        "regularization": {
+            "entropy_weight": args.entropy_weight,
+            "component_diversity_weight": args.component_diversity_weight,
+            "component_diversity_target": args.component_diversity_target,
+        },
     }
     save_checkpoint(out_dir / "model.pt", model.cpu(), tokenizer, metadata, training_state={"epoch": args.epochs, "global_step": global_step, "optimizer_state": optimizer.state_dict()})
     logger.emit({"stage": "saved", "checkpoint": str(out_dir / "model.pt")})

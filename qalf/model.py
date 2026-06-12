@@ -184,13 +184,21 @@ class QALFModel(nn.Module):
     @torch.no_grad()
     def diagnostics(self, context_ids: torch.Tensor) -> dict[str, float]:
         rho = self.density(context_ids)
+        purity_values = purity(rho)
+        components = self.context_components(context_ids)
+        overlap = component_overlap_matrix(components)
+        offdiag = offdiagonal_values(overlap)
         mix = torch.softmax(self.component_logits, dim=0)
         entropy = -(mix * mix.clamp_min(1e-8).log()).sum()
         return {
             "trace_mean": float(trace_real(rho).mean().cpu()),
-            "purity_mean": float(purity(rho).mean().cpu()),
+            "purity_mean": float(purity_values.mean().cpu()),
+            "density_effective_rank": float((1.0 / purity_values.clamp_min(1e-8)).mean().cpu()),
             "context_norm_mean": float(torch.linalg.vector_norm(self.context_state(context_ids), dim=-1).mean().cpu()),
             "component_entropy": float(entropy.detach().cpu()),
+            "component_effective_count": float(torch.exp(entropy).detach().cpu()),
+            "component_overlap_mean": float(offdiag.mean().cpu()) if offdiag.numel() else 0.0,
+            "component_overlap_max": float(offdiag.max().cpu()) if offdiag.numel() else 0.0,
             "components": float(self.config.num_components),
             "bigram_strength": self.config.bigram_strength,
             "trigram_strength": self.config.trigram_strength,
@@ -297,12 +305,42 @@ def device_for_training(requested: str = "auto") -> torch.device:
     return torch.device(requested)
 
 
+def component_overlap_matrix(components: torch.Tensor) -> torch.Tensor:
+    """Squared pairwise overlaps between normalized complex context components."""
+    gram = torch.einsum("bcd,bed->bce", components.conj(), components)
+    return gram.abs().square()
+
+
+def offdiagonal_values(matrix: torch.Tensor) -> torch.Tensor:
+    if matrix.shape[-1] <= 1:
+        return matrix.new_empty(0)
+    eye = torch.eye(matrix.shape[-1], dtype=torch.bool, device=matrix.device)
+    return matrix[..., ~eye]
+
+
+def component_diversity_loss(
+    model: QALFModel,
+    context_ids: torch.Tensor,
+    target_overlap: float = 0.05,
+) -> torch.Tensor:
+    """Penalize component states that collapse into the same Hilbert direction."""
+    components = model.context_components(context_ids)
+    overlap = component_overlap_matrix(components)
+    offdiag = offdiagonal_values(overlap)
+    if offdiag.numel() == 0:
+        return context_ids.new_tensor(0.0, dtype=torch.float32)
+    return F.relu(offdiag - target_overlap).square().mean()
+
+
 def cross_entropy_with_l2(
     model: QALFModel,
     logits: torch.Tensor,
     targets: torch.Tensor,
     l2_weight: float = 1e-5,
     entropy_weight: float = 0.0,
+    component_context_ids: torch.Tensor | None = None,
+    component_diversity_weight: float = 0.0,
+    component_diversity_target: float = 0.05,
 ) -> torch.Tensor:
     loss = F.cross_entropy(logits, targets)
     relation_energy = model.memory.real.square().mean() + model.memory.imag.square().mean()
@@ -314,4 +352,10 @@ def cross_entropy_with_l2(
         rel_entropy = -(rel_mix * rel_mix.clamp_min(1e-8).log()).sum()
         # subtract entropy to maximise it (resist collapse of both mixture distributions)
         loss = loss - entropy_weight * (comp_entropy + rel_entropy)
+    if component_diversity_weight > 0.0 and component_context_ids is not None:
+        loss = loss + component_diversity_weight * component_diversity_loss(
+            model,
+            component_context_ids,
+            target_overlap=component_diversity_target,
+        )
     return loss

@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 
 from qalf.data import DialogueExample, build_tokenizer, encode_examples, make_windows, relation_counts
-from qalf.model import QALFConfig, QALFModel, load_checkpoint, save_checkpoint
+from qalf.model import QALFConfig, QALFModel, component_diversity_loss, load_checkpoint, save_checkpoint
 from qalf.state import is_hermitian, trace_real
 
 
@@ -45,6 +45,18 @@ class QALFInvariantTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(probs).all())
         self.assertTrue(torch.all(probs >= 0))
         self.assertTrue(torch.allclose(probs.sum(dim=-1), torch.ones(3), atol=1e-5))
+
+    def test_component_diagnostics_and_diversity_loss_are_valid(self):
+        contexts, _, _ = make_windows(self.encoded, self.model.config.context_size, self.tokenizer.pad_id)
+        diagnostics = self.model.diagnostics(contexts[:4])
+        self.assertIn("component_overlap_mean", diagnostics)
+        self.assertIn("component_overlap_max", diagnostics)
+        self.assertIn("density_effective_rank", diagnostics)
+        self.assertGreaterEqual(diagnostics["component_overlap_mean"], 0.0)
+        self.assertLessEqual(diagnostics["component_overlap_max"], 1.0 + 1e-5)
+        loss = component_diversity_loss(self.model, contexts[:4], target_overlap=0.05)
+        self.assertTrue(torch.isfinite(loss))
+        self.assertGreaterEqual(float(loss.detach()), 0.0)
 
     def test_save_load_preserves_generation_with_seed(self):
         with tempfile.TemporaryDirectory() as tmp:

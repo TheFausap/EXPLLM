@@ -128,6 +128,10 @@ conda run -n EXPLLM python -m qalf.train \
   --trigram-top-k 96 \
   --trigram-min-count 2 \
   --trigram-strength 1.0 \
+  --bigram-strength 0.35 \
+  --entropy-weight 0.02 \
+  --component-diversity-weight 0.1 \
+  --component-diversity-target 0.05 \
   --attractor-limit 2000 \
   --log-every 2 \
   --log-file runs/qalf_dgx_heavy/train.jsonl
@@ -206,8 +210,11 @@ with `--lr 0.01`. For exact resume behavior, keep dataset, `--max-windows`,
 ## QALF-Mixed DGX Run
 
 QALF-Mixed replaces the previous rank-one context with a mixture of several
-phase-weighted context components. In logs, `purity_mean` should now be below
-`1.0`; that is the sanity check that the density context is actually mixed.
+phase-weighted context components. In logs, early `purity_mean` should be below
+`1.0`, but the stronger sanity check is that `component_overlap_mean` stays low
+and `density_effective_rank` does not collapse back to `1.0`. If purity rises
+toward `1.0` while `component_entropy` remains high, the components have aligned
+and the run needs component-diversity regularisation.
 
 Short comparison run first:
 
@@ -229,6 +236,10 @@ conda run -n EXPLLM python -m qalf.train \
   --trigram-top-k 96 \
   --trigram-min-count 2 \
   --trigram-strength 1.0 \
+  --bigram-strength 0.35 \
+  --entropy-weight 0.02 \
+  --component-diversity-weight 0.1 \
+  --component-diversity-target 0.05 \
   --attractor-limit 2000 \
   --save-every 2 \
   --log-every 1 \
