@@ -29,6 +29,11 @@ class QALFConfig:
     pad_id: int = 0
     component_temperature: float = 1.0
     component_min_weight: float = 0.0
+    attention_mode: str = "component"
+    memory_mode: str = "linear"
+    attention_layers: int = 2
+    attention_phase_rank: int = 4
+    attention_rotation_scale: float = 0.1
 
 
 class QuantumLexicon(nn.Module):
@@ -66,6 +71,203 @@ class EntangledMemory(nn.Module):
         return torch.einsum("k,bkd->bd", mixed, transformed)
 
 
+def _edge_groups(size: int) -> tuple[torch.Tensor, list[tuple[int, int]]]:
+    """Local-plus-log disjoint edge groups for unitary Givens sweeps."""
+    groups: list[list[tuple[int, int]]] = []
+    stride = 1
+    while stride < size:
+        starts = (0, 1) if stride == 1 else (0, max(1, stride // 2))
+        for start in dict.fromkeys(starts):
+            edges = [(left, left + stride) for left in range(start, size - stride, 2 * stride)]
+            if edges:
+                groups.append(edges)
+        stride *= 2
+    flat = [edge for group in groups for edge in group]
+    ranges: list[tuple[int, int]] = []
+    cursor = 0
+    for group in groups:
+        next_cursor = cursor + len(group)
+        ranges.append((cursor, next_cursor))
+        cursor = next_cursor
+    if not flat:
+        return torch.empty(0, 2, dtype=torch.long), ranges
+    return torch.tensor(flat, dtype=torch.long), ranges
+
+
+class QuantumWindowAttention(nn.Module):
+    """Unitary context-window mixer followed by position-projector readout."""
+
+    def __init__(
+        self,
+        context_size: int,
+        dimension: int,
+        num_components: int,
+        layers: int,
+        phase_rank: int,
+        rotation_scale: float,
+        pad_id: int,
+    ):
+        super().__init__()
+        self.context_size = context_size
+        self.dimension = dimension
+        self.num_components = num_components
+        self.layers = max(0, layers)
+        self.phase_rank = max(1, phase_rank)
+        self.rotation_scale = float(rotation_scale)
+        self.pad_id = pad_id
+
+        position_edges, self._position_group_ranges = _edge_groups(context_size)
+        feature_edges, self._feature_group_ranges = _edge_groups(dimension)
+        self.register_buffer("position_edges", position_edges)
+        self.register_buffer("feature_edges", feature_edges)
+
+        pos_edges = position_edges.shape[0]
+        feat_edges = feature_edges.shape[0]
+        init = 0.02
+        self.position_theta = nn.Parameter(torch.randn(self.layers, pos_edges) * init)
+        self.position_phi = nn.Parameter(torch.randn(self.layers, pos_edges) * init)
+        self.feature_theta = nn.Parameter(torch.randn(self.layers, feat_edges) * init)
+        self.feature_phi = nn.Parameter(torch.randn(self.layers, feat_edges) * init)
+        self.phase_position = nn.Parameter(torch.randn(self.layers, self.phase_rank, context_size) * init)
+        self.phase_feature = nn.Parameter(torch.randn(self.layers, self.phase_rank, dimension) * init)
+        self.readout_real = nn.Parameter(torch.randn(num_components, context_size) / math.sqrt(max(context_size, 1)))
+        self.readout_imag = nn.Parameter(torch.randn(num_components, context_size) / math.sqrt(max(context_size, 1)))
+
+    def initial_register(self, context_ids: torch.Tensor, token_states: torch.Tensor) -> torch.Tensor:
+        embedded = token_states[context_ids]
+        mask = context_ids.ne(self.pad_id).to(embedded.real.dtype)
+        psi = embedded * mask[..., None].to(embedded.dtype)
+        norms = torch.linalg.vector_norm(psi.reshape(psi.shape[0], -1), dim=-1)
+        empty = norms.le(1e-8)
+        if empty.any():
+            psi = psi.clone()
+            psi[empty, -1, :] = token_states[self.pad_id]
+        norms = torch.linalg.vector_norm(psi.reshape(psi.shape[0], -1), dim=-1, keepdim=True).clamp_min(1e-8)
+        return psi / norms[:, :, None].to(psi.dtype)
+
+    def _apply_position_group(self, psi: torch.Tensor, layer: int, start: int, end: int) -> torch.Tensor:
+        if start == end:
+            return psi
+        edges = self.position_edges[start:end]
+        left = edges[:, 0]
+        right = edges[:, 1]
+        theta = self.rotation_scale * torch.tanh(self.position_theta[layer, start:end])
+        phi = self.position_phi[layer, start:end]
+        c = theta.cos()[None, :, None].to(psi.dtype)
+        s = theta.sin()[None, :, None].to(psi.dtype)
+        phase = torch.exp(1j * phi)[None, :, None].to(psi.dtype)
+        x = psi.index_select(1, left)
+        y = psi.index_select(1, right)
+        rotated = psi.clone()
+        rotated[:, left, :] = c * x - phase * s * y
+        rotated[:, right, :] = phase.conj() * s * x + c * y
+        return rotated
+
+    def _apply_feature_group(self, psi: torch.Tensor, layer: int, start: int, end: int) -> torch.Tensor:
+        if start == end:
+            return psi
+        edges = self.feature_edges[start:end]
+        left = edges[:, 0]
+        right = edges[:, 1]
+        theta = self.rotation_scale * torch.tanh(self.feature_theta[layer, start:end])
+        phi = self.feature_phi[layer, start:end]
+        c = theta.cos()[None, None, :].to(psi.dtype)
+        s = theta.sin()[None, None, :].to(psi.dtype)
+        phase = torch.exp(1j * phi)[None, None, :].to(psi.dtype)
+        x = psi.index_select(2, left)
+        y = psi.index_select(2, right)
+        rotated = psi.clone()
+        rotated[:, :, left] = c * x - phase * s * y
+        rotated[:, :, right] = phase.conj() * s * x + c * y
+        return rotated
+
+    def evolve(self, psi: torch.Tensor) -> torch.Tensor:
+        for layer in range(self.layers):
+            for start, end in self._position_group_ranges:
+                psi = self._apply_position_group(psi, layer, start, end)
+            pos = torch.tanh(self.phase_position[layer])
+            feat = torch.tanh(self.phase_feature[layer])
+            angle = self.rotation_scale * torch.einsum("rl,rd->ld", pos, feat)
+            psi = psi * torch.exp(1j * angle).to(psi.dtype)[None, :, :]
+            for start, end in self._feature_group_ranges:
+                psi = self._apply_feature_group(psi, layer, start, end)
+        return psi
+
+    def readout_projectors(self) -> torch.Tensor:
+        return normalize_complex(torch.complex(self.readout_real, self.readout_imag))
+
+    def components_from_register(self, psi: torch.Tensor, fallback_state: torch.Tensor) -> torch.Tensor:
+        projectors = self.readout_projectors()
+        components = torch.einsum("cl,bld->bcd", projectors.conj(), psi)
+        norms = torch.linalg.vector_norm(components, dim=-1)
+        empty = norms.le(1e-8)
+        if empty.any():
+            components = components.clone()
+            components[empty] = fallback_state
+        return normalize_complex(components)
+
+    def forward(self, context_ids: torch.Tensor, token_states: torch.Tensor) -> torch.Tensor:
+        psi = self.initial_register(context_ids, token_states)
+        evolved = self.evolve(psi)
+        return self.components_from_register(evolved, token_states[self.pad_id])
+
+    @torch.no_grad()
+    def norm_drift(self, context_ids: torch.Tensor, token_states: torch.Tensor) -> tuple[float, float]:
+        psi = self.initial_register(context_ids, token_states)
+        before = torch.linalg.vector_norm(psi.reshape(psi.shape[0], -1), dim=-1)
+        evolved = self.evolve(psi)
+        after = torch.linalg.vector_norm(evolved.reshape(evolved.shape[0], -1), dim=-1)
+        drift = (after - before).abs()
+        return float(drift.mean().cpu()), float(drift.max().cpu())
+
+
+class UnitaryFeatureMemory(nn.Module):
+    """Norm-preserving feature-register memory used by the unitary experiment."""
+
+    def __init__(self, dimension: int, layers: int, rotation_scale: float):
+        super().__init__()
+        self.dimension = dimension
+        self.layers = max(1, layers)
+        self.rotation_scale = float(rotation_scale)
+        feature_edges, self._feature_group_ranges = _edge_groups(dimension)
+        self.register_buffer("feature_edges", feature_edges)
+        edge_count = feature_edges.shape[0]
+        init = 0.02
+        self.theta = nn.Parameter(torch.randn(self.layers, edge_count) * init)
+        self.phi = nn.Parameter(torch.randn(self.layers, edge_count) * init)
+        self.phase = nn.Parameter(torch.randn(self.layers, dimension) * init)
+
+    def _apply_group(self, state: torch.Tensor, layer: int, start: int, end: int) -> torch.Tensor:
+        if start == end:
+            return state
+        edges = self.feature_edges[start:end]
+        left = edges[:, 0]
+        right = edges[:, 1]
+        theta = self.rotation_scale * torch.tanh(self.theta[layer, start:end])
+        phi = self.phi[layer, start:end]
+        c = theta.cos()[None, :].to(state.dtype)
+        s = theta.sin()[None, :].to(state.dtype)
+        phase = torch.exp(1j * phi)[None, :].to(state.dtype)
+        x = state.index_select(1, left)
+        y = state.index_select(1, right)
+        rotated = state.clone()
+        rotated[:, left] = c * x - phase * s * y
+        rotated[:, right] = phase.conj() * s * x + c * y
+        return rotated
+
+    def forward(self, state: torch.Tensor) -> torch.Tensor:
+        state = normalize_complex(state)
+        for layer in range(self.layers):
+            phase = torch.exp(1j * (self.rotation_scale * torch.tanh(self.phase[layer]))).to(state.dtype)
+            state = state * phase[None, :]
+            for start, end in self._feature_group_ranges:
+                state = self._apply_group(state, layer, start, end)
+        return state
+
+    def energy(self) -> torch.Tensor:
+        return self.theta.square().mean() + self.phi.square().mean() + self.phase.square().mean()
+
+
 class QALFModel(nn.Module):
     """Generative language model without attention, recurrence, or pretrained weights."""
 
@@ -76,9 +278,27 @@ class QALFModel(nn.Module):
         trigram_prior: dict[str, torch.Tensor] | None = None,
     ):
         super().__init__()
+        if config.attention_mode not in {"component", "entangling"}:
+            raise ValueError("attention_mode must be 'component' or 'entangling'")
+        if config.memory_mode not in {"linear", "unitary"}:
+            raise ValueError("memory_mode must be 'linear' or 'unitary'")
         self.config = config
         self.lexicon = QuantumLexicon(config.vocab_size, config.dimension)
         self.memory = EntangledMemory(config.dimension, config.num_relations)
+        self.unitary_memory = UnitaryFeatureMemory(
+            config.dimension,
+            config.num_relations,
+            config.attention_rotation_scale,
+        )
+        self.window_attention = QuantumWindowAttention(
+            config.context_size,
+            config.dimension,
+            config.num_components,
+            config.attention_layers,
+            config.attention_phase_rank,
+            config.attention_rotation_scale,
+            config.pad_id,
+        )
         self.phase_frequencies = nn.Parameter(torch.linspace(0.05, 1.25, config.dimension))
         self.component_logits = nn.Parameter(torch.zeros(config.num_components))
         self.component_phase_offsets = nn.Parameter(torch.linspace(0.0, 1.0, config.num_components))
@@ -122,6 +342,8 @@ class QALFModel(nn.Module):
 
     def context_components(self, context_ids: torch.Tensor) -> torch.Tensor:
         states = self.lexicon()
+        if self.config.attention_mode == "entangling":
+            return self.window_attention(context_ids, states)
         embedded = states[context_ids]
         weights = self.component_weights(context_ids)
         positions = torch.arange(context_ids.shape[1], device=context_ids.device, dtype=torch.float32)
@@ -140,8 +362,9 @@ class QALFModel(nn.Module):
         return normalize_complex(components)
 
     def context_state(self, context_ids: torch.Tensor) -> torch.Tensor:
-        mix = self.component_mixture().to(self.context_components(context_ids).dtype)
-        return normalize_complex(torch.einsum("c,bcd->bd", mix, self.context_components(context_ids)))
+        components = self.context_components(context_ids)
+        mix = self.component_mixture().to(components.dtype)
+        return normalize_complex(torch.einsum("c,bcd->bd", mix, components))
 
     def density(self, context_ids: torch.Tensor) -> torch.Tensor:
         components = self.context_components(context_ids)
@@ -181,7 +404,11 @@ class QALFModel(nn.Module):
         token_states = self.lexicon()
         components = self.context_components(context_ids)
         batch, num_components, dim = components.shape
-        related = normalize_complex(self.memory(components.reshape(batch * num_components, dim)))
+        flat_components = components.reshape(batch * num_components, dim)
+        if self.config.memory_mode == "unitary":
+            related = self.unitary_memory(flat_components)
+        else:
+            related = normalize_complex(self.memory(flat_components))
         related = related.reshape(batch, num_components, dim)
         amplitudes = torch.einsum("bcd,vd->bcv", related, token_states.conj())
         born_logits = torch.log(amplitudes.abs().square().clamp_min(1e-8))
@@ -195,7 +422,7 @@ class QALFModel(nn.Module):
         return logits
 
     @torch.no_grad()
-    def diagnostics(self, context_ids: torch.Tensor) -> dict[str, float]:
+    def diagnostics(self, context_ids: torch.Tensor) -> dict[str, float | str]:
         rho = self.density(context_ids)
         purity_values = purity(rho)
         components = self.context_components(context_ids)
@@ -203,6 +430,10 @@ class QALFModel(nn.Module):
         offdiag = offdiagonal_values(overlap)
         mix = self.component_mixture()
         entropy = -(mix * mix.clamp_min(1e-8).log()).sum()
+        if self.config.attention_mode == "entangling":
+            drift_mean, drift_max = self.window_attention.norm_drift(context_ids, self.lexicon())
+        else:
+            drift_mean, drift_max = 0.0, 0.0
         return {
             "trace_mean": float(trace_real(rho).mean().cpu()),
             "purity_mean": float(purity_values.mean().cpu()),
@@ -217,6 +448,12 @@ class QALFModel(nn.Module):
             "components": float(self.config.num_components),
             "bigram_strength": self.config.bigram_strength,
             "trigram_strength": self.config.trigram_strength,
+            "window_norm_drift_mean": drift_mean,
+            "window_norm_drift_max": drift_max,
+            "attention_layers": float(self.config.attention_layers),
+            "attention_phase_rank": float(self.config.attention_phase_rank),
+            "attention_mode": self.config.attention_mode,
+            "memory_mode": self.config.memory_mode,
         }
 
     @torch.no_grad()
@@ -358,7 +595,10 @@ def cross_entropy_with_l2(
     component_diversity_target: float = 0.05,
 ) -> torch.Tensor:
     loss = F.cross_entropy(logits, targets)
-    relation_energy = model.memory.real.square().mean() + model.memory.imag.square().mean()
+    if model.config.memory_mode == "unitary":
+        relation_energy = model.unitary_memory.energy()
+    else:
+        relation_energy = model.memory.real.square().mean() + model.memory.imag.square().mean()
     loss = loss + l2_weight * relation_energy
     if entropy_weight > 0.0:
         comp_mix = model.component_mixture()

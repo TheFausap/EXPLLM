@@ -54,6 +54,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--component-diversity-target", type=float, default=0.05, help="Allowed squared overlap between component states before the diversity penalty activates.")
     parser.add_argument("--component-temperature", type=float, default=1.0, help="Temperature for component mixture logits. Higher values keep component weights flatter.")
     parser.add_argument("--component-min-weight", type=float, default=0.0, help="Hard minimum mixture weight per component. Example: 0.08 with 6 components keeps at least 48%% mass spread across all components.")
+    parser.add_argument("--attention-mode", choices=["component", "entangling"], default="component", help="Context mixer: legacy phase components or unitary entangling window.")
+    parser.add_argument("--memory-mode", choices=["linear", "unitary"], default="linear", help="Post-context memory transform: legacy relation bank or unitary feature circuit.")
+    parser.add_argument("--attention-layers", type=int, default=2, help="Number of unitary entangling-window blocks.")
+    parser.add_argument("--attention-phase-rank", type=int, default=4, help="Rank of the factorized position-feature phase gate.")
+    parser.add_argument("--attention-rotation-scale", type=float, default=0.1, help="Maximum scale applied to learned Givens rotations and phase gates.")
     return parser.parse_args()
 
 
@@ -81,7 +86,15 @@ def set_optimizer_lr(optimizer: torch.optim.Optimizer, lr: float) -> None:
         group["lr"] = lr
 
 
-_BUFFER_KEYS = frozenset({"bigram_logits", "trigram_keys", "trigram_token_ids", "trigram_token_logits"})
+_BUFFER_KEYS = frozenset({
+    "bigram_logits",
+    "trigram_keys",
+    "trigram_token_ids",
+    "trigram_token_logits",
+    "window_attention.position_edges",
+    "window_attention.feature_edges",
+    "unitary_memory.feature_edges",
+})
 
 
 def _restore_exp_avg_sq(
@@ -154,6 +167,11 @@ def main() -> None:
             pad_id=tokenizer.pad_id,
             component_temperature=args.component_temperature,
             component_min_weight=args.component_min_weight,
+            attention_mode=args.attention_mode,
+            memory_mode=args.memory_mode,
+            attention_layers=args.attention_layers,
+            attention_phase_rank=args.attention_phase_rank,
+            attention_rotation_scale=args.attention_rotation_scale,
         )
         model = None
         logger.emit({"stage": "build_tokenizer", "vocab": len(tokenizer.vocab)})
@@ -174,7 +192,18 @@ def main() -> None:
     logger.emit({"stage": "build_higher_order_memory", "trigram_contexts": int(trigram["keys"].numel()), "trigram_top_k": args.trigram_top_k, "bigram_gb": bigram_gb, "trigram_gb": trigram_gb})
     device = device_for_training(args.device)
     bigram_device = torch.device(args.bigram_device) if args.bigram_device else device
-    logger.emit({"stage": "init_model", "device": str(device), "bigram_device": str(bigram_device), "dimension": config.dimension, "relations": config.num_relations, "components": config.num_components})
+    logger.emit({
+        "stage": "init_model",
+        "device": str(device),
+        "bigram_device": str(bigram_device),
+        "dimension": config.dimension,
+        "relations": config.num_relations,
+        "components": config.num_components,
+        "attention_mode": config.attention_mode,
+        "memory_mode": config.memory_mode,
+        "attention_layers": config.attention_layers,
+        "attention_phase_rank": config.attention_phase_rank,
+    })
     if model is None:
         model = QALFModel(config, bigram_logits=bigram, trigram_prior=trigram)
     else:
@@ -294,6 +323,13 @@ def main() -> None:
                         "component_temperature": args.component_temperature,
                         "component_min_weight": args.component_min_weight,
                     },
+                    "architecture": {
+                        "attention_mode": config.attention_mode,
+                        "memory_mode": config.memory_mode,
+                        "attention_layers": config.attention_layers,
+                        "attention_phase_rank": config.attention_phase_rank,
+                        "attention_rotation_scale": config.attention_rotation_scale,
+                    },
                 },
                 training_state={"epoch": epoch, "global_step": global_step, "optimizer_state": optimizer.state_dict()},
             )
@@ -319,6 +355,13 @@ def main() -> None:
             "component_diversity_target": args.component_diversity_target,
             "component_temperature": args.component_temperature,
             "component_min_weight": args.component_min_weight,
+        },
+        "architecture": {
+            "attention_mode": config.attention_mode,
+            "memory_mode": config.memory_mode,
+            "attention_layers": config.attention_layers,
+            "attention_phase_rank": config.attention_phase_rank,
+            "attention_rotation_scale": config.attention_rotation_scale,
         },
     }
     save_checkpoint(out_dir / "model.pt", model.cpu(), tokenizer, metadata, training_state={"epoch": args.epochs, "global_step": global_step, "optimizer_state": optimizer.state_dict()})

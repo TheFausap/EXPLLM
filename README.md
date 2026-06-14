@@ -290,3 +290,120 @@ conda run -n EXPLLM python -m qalf.eval \
   --eval-batch-size 1024 \
   --log-file runs/qalf_mixed_compare/eval_raw.jsonl
 ```
+
+## QALF-Entangling Window
+
+`--attention-mode entangling` replaces the phase-weighted component collapse with
+a unitary window circuit over the position x Hilbert-feature register. The circuit
+uses fixed local-plus-log-stride Givens rotations, factorized phase gates, and
+position readout projectors. `--memory-mode unitary` also replaces the learned
+linear relation bank with a norm-preserving feature circuit, so the forward path
+stays unitary until readout measurement.
+
+CPU smoke run with count priors disabled:
+
+```bash
+conda run -n EXPLLM python -m qalf.train \
+  --data data/seed_corpus.jsonl \
+  --out runs/qalf_entangling_smoke \
+  --device cpu \
+  --dimension 32 \
+  --context-size 12 \
+  --components 3 \
+  --relations 2 \
+  --epochs 2 \
+  --batch-size 64 \
+  --lr 0.01 \
+  --max-windows 512 \
+  --attention-mode entangling \
+  --memory-mode unitary \
+  --attention-layers 1 \
+  --attention-phase-rank 2 \
+  --bigram-strength 0 \
+  --trigram-strength 0 \
+  --log-every 1 \
+  --log-file runs/qalf_entangling_smoke/train.jsonl
+
+conda run -n EXPLLM python -m qalf.eval \
+  --checkpoint runs/qalf_entangling_smoke/model.pt \
+  --data data/seed_corpus.jsonl \
+  --out runs/qalf_entangling_smoke/eval_raw.json \
+  --no-attractor \
+  --eval-batch-size 128 \
+  --log-file runs/qalf_entangling_smoke/eval_raw.jsonl
+```
+
+Matched TinyStories comparison runs should keep the state budget close and make
+classical priors non-central. Start with a no-prior QALF-Mixed baseline, then run
+entangling attention with linear and unitary memory:
+
+```bash
+# Baseline: current component mixer, no count priors.
+conda run -n EXPLLM python -m qalf.train \
+  --data data/tinystories_qalf.jsonl \
+  --out runs/qalf_component_noprior_compare \
+  --device cuda \
+  --dimension 192 \
+  --context-size 96 \
+  --components 6 \
+  --relations 8 \
+  --epochs 8 \
+  --batch-size 512 \
+  --lr 0.004 \
+  --max-windows 1000000 \
+  --bigram-strength 0 \
+  --trigram-strength 0 \
+  --entropy-weight 0.02 \
+  --component-diversity-weight 0.1 \
+  --component-diversity-target 0.05 \
+  --log-every 1 \
+  --log-file runs/qalf_component_noprior_compare/train.jsonl
+
+# Entangling window with legacy linear relation memory.
+conda run -n EXPLLM python -m qalf.train \
+  --data data/tinystories_qalf.jsonl \
+  --out runs/qalf_entangling_linear_compare \
+  --device cuda \
+  --dimension 192 \
+  --context-size 96 \
+  --components 6 \
+  --relations 8 \
+  --epochs 8 \
+  --batch-size 512 \
+  --lr 0.004 \
+  --max-windows 1000000 \
+  --attention-mode entangling \
+  --memory-mode linear \
+  --attention-layers 2 \
+  --attention-phase-rank 4 \
+  --bigram-strength 0 \
+  --trigram-strength 0 \
+  --log-every 1 \
+  --log-file runs/qalf_entangling_linear_compare/train.jsonl
+
+# Entangling window with unitary memory.
+conda run -n EXPLLM python -m qalf.train \
+  --data data/tinystories_qalf.jsonl \
+  --out runs/qalf_entangling_unitary_compare \
+  --device cuda \
+  --dimension 192 \
+  --context-size 96 \
+  --components 6 \
+  --relations 8 \
+  --epochs 8 \
+  --batch-size 512 \
+  --lr 0.004 \
+  --max-windows 1000000 \
+  --attention-mode entangling \
+  --memory-mode unitary \
+  --attention-layers 2 \
+  --attention-phase-rank 4 \
+  --bigram-strength 0 \
+  --trigram-strength 0 \
+  --log-every 1 \
+  --log-file runs/qalf_entangling_unitary_compare/train.jsonl
+```
+
+Evaluate all three with `--no-attractor`. The key diagnostics are
+`window_norm_drift_max`, raw perplexity, and whether the entangling/unitary run
+improves fixed-prompt samples without count priors carrying the result.
