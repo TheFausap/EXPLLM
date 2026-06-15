@@ -404,6 +404,8 @@ conda run -n EXPLLM python -m qalf.train \
   --log-file runs/qalf_entangling_unitary_compare/train.jsonl
 ```
 
-Evaluate all three with `--no-attractor`. The key diagnostics are
+Train all three comparison models without count priors as shown above, then pass
+`--no-attractor` only to `qalf.eval` when evaluating each checkpoint. Training
+commands do not accept an attractor flag. The key diagnostics are
 `window_norm_drift_max`, raw perplexity, and whether the entangling/unitary run
 improves fixed-prompt samples without count priors carrying the result.
