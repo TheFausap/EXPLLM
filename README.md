@@ -3,6 +3,9 @@
 > **Separate architecture experiment:** [`griffin_memory/`](griffin_memory/README.md)
 > implements the uploaded Griffin-style decoder and three-tier memory diagram,
 > with from-scratch training, data preparation, generation, and full-state resume.
+> For a scripted PG-19 run (prepare → plan → pilot → train → held-out generation
+> samples → evaluation → report) see
+> [`griffin_memory/PG19_RUNBOOK.md`](griffin_memory/PG19_RUNBOOK.md).
 > It is independent of the QALF implementation described below.
 
 QALF is a small proof-of-concept language model that uses complex Hilbert-space

@@ -13,6 +13,9 @@ claim of production-scale performance or guaranteed long-form coherence.
 
 ## Single DGX Spark and starter datasets
 
+See **[PG19_RUNBOOK.md](PG19_RUNBOOK.md)** for the end-to-end PG-19 workflow
+(`scripts/pg19_full_run.sh`: prepare → plan → pilot → train → samples → evaluate
+→ report), budget arithmetic, expected wall-clock time and troubleshooting.
 See **[DGX_SPARK.md](DGX_SPARK.md)** for TinyStories / PG-19 recommendations,
 source-aware download/preparation commands, and single-Spark BF16 launch profiles.
 `prepare_corpus.py` preserves official splits, keeps books whole, deduplicates
@@ -52,6 +55,15 @@ python -m griffin_memory.evaluate \
   --checkpoint griffin_memory/artifacts/demo-run/last.pt \
   --data griffin_memory/artifacts/demo-data --device cpu --threads 1
 
+# Held-out generation report: prompts, greedy/sampled continuations, the real
+# continuation, retrieval on/off continuation CE and memory diagnostics.
+python -m griffin_memory.generate_samples \
+  --checkpoint griffin_memory/artifacts/demo-run/best.pt \
+  --data griffin_memory/artifacts/demo-data --split val \
+  --out griffin_memory/artifacts/demo-run/samples \
+  --documents 2 --prompt-tokens 48 --prefill-tokens 96 \
+  --max-new-tokens 64 --continuation-tokens 64 --device cpu --threads 1
+
 python -m unittest discover -s griffin_memory/tests -v
 ```
 
@@ -82,8 +94,12 @@ Use a new output directory when repeating preparation or starting a fresh run.
 | Write/retrieve top-K | Causal post-chunk writes, token-specific top-K reads, learned gated residual fusion |
 
 Files: `model.py` (decoder and streaming state), `memory.py` (ANN and retrieval
-adapter), `prepare.py` / `tokenizer.py` / `data.py` (corpus pipeline), `train.py`,
-`evaluate.py`, `generate.py`, `configs/`, `examples/`, and `tests/`.
+adapter), `prepare.py` / `prepare_corpus.py` / `tokenizer.py` / `data.py` (corpus
+pipeline), `train.py`, `evaluate.py`, `generate.py`, `generate_samples.py`
+(batch held-out generation reports), `run_report.py` (budget planning, throughput
+estimates, `run_report.md`), `scripts/train_spark.sh`,
+`scripts/pg19_full_run.sh` (end-to-end driver), `configs/`, `examples/`, and
+`tests/`. See [PG19_RUNBOOK.md](PG19_RUNBOOK.md).
 
 ## Mathematical and architectural choices
 
@@ -316,12 +332,28 @@ vectors, metadata, and pending token IDs to JSON. It is a diagnostic export, not
 a cross-document knowledge base or a persisted chat-session resume interface.
 Never commit exports/checkpoints containing private training text.
 
+`generate_samples.py` is the batch counterpart used for run reports. It streams
+an optional long prefill (`--prefill-tokens`) so the retrieval bank already holds
+earlier parts of the same book, then writes `samples.md`/`samples.json` with the
+real held-out prompt, greedy and sampled continuations, the real continuation,
+teacher-forced continuation CE with the retrieval tier on and off
+(`--no-ablation` skips the second pass) and memory diagnostics. `run_report.py
+plan` converts corpus targets plus batch shape into steps and tokens,
+`run_report.py estimate` extrapolates wall-clock time from a `train.jsonl`, and
+`run_report.py build` assembles `run_report.md` from a run directory.
+`scripts/pg19_full_run.sh` chains all of it with stage selection (`--only`,
+`--skip`), a throughput pilot, `--dry-run`, and `--resume` for continuing. Its
+generated and reference text carries whatever rights the source books have: do
+not redistribute it.
+
 ## Validation performed and scaling limits
 
 Tested on CPU with Python 3.11 / PyTorch 2.5.1:
 
-- 33 tests pass, including optional locally trained BPE round trips and 12
-  fixture-based corpus-preparation tests.
+- 58 tests pass, including optional locally trained BPE round trips, 12
+  fixture-based corpus-preparation tests, and 20 tests covering the generation
+  report, the run report (planning, throughput estimates, assembly) and the
+  end-to-end driver script.
 - Causality with populated retrieval memory; strict local attention windows.
 - Chunked vs. tokenwise equivalence, RoPE positions and convolution/KV bounds.
 - Finite, nonzero gradients for **every** trainable parameter with memory active.
@@ -332,6 +364,10 @@ Tested on CPU with Python 3.11 / PyTorch 2.5.1:
 - End-to-end byte/FP32 and BPE/CPU-BF16 training, evaluation and generation run.
 - An 80-update smoke run reduced held-out byte-token loss to about 3.164 on the
   tiny bundled corpus. This is a learning sanity check, **not** a quality benchmark.
+- A full `pg19_full_run.sh` smoke pass (prepare → plan → train → samples → eval →
+  report) completes on CPU against a book-shaped fixture, and `--dry-run`,
+  `--only`, `--pilot-steps` and `--resume` were exercised. Real PG-19 downloads
+  and GPU paths remain unverified in this sandbox.
 
 **CUDA/FP16 and the larger presets have not been exercised on a GPU here.**
 The recurrence is a Python time-step scan, not a fused parallel scan; retrieval

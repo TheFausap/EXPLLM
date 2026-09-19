@@ -122,6 +122,11 @@ corpus compatible with the trainer's strict full-state `--resume`; see below.
 
 ## Option 2 — PG-19 (long-memory experiment)
 
+For the complete staged workflow (prepare → plan → pilot → train → samples →
+evaluation → `run_report.md`), budget arithmetic and troubleshooting see
+**[PG19_RUNBOOK.md](PG19_RUNBOOK.md)**, which wraps the commands below in
+`bash griffin_memory/scripts/pg19_full_run.sh RUN_DIR --dataset pg19 ...`.
+
 ```bash
 python -m griffin_memory.prepare_corpus \
   --dataset pg19 \
@@ -260,8 +265,11 @@ for a cross-corpus curriculum is not implemented by these scripts.
 The corpus adapters have 12 offline tests covering framing, seeded selection,
 official split preservation, whole-book metadata, checksum/cache/retry behavior,
 GCS listing pagination, deduplication priority, train-only bounded BPE fitting,
-explicit test preparation, and a fixture-based end-to-end run. All **33**
-`griffin_memory` tests and the **11** existing QALF tests pass on CPU.
+explicit test preparation, and a fixture-based end-to-end run. All **58**
+`griffin_memory` tests (including 20 for the PG-19 pipeline, generation reports
+and the driver script) and the repository's other tests pass on CPU. The driver
+itself was exercised end-to-end on a book-shaped local fixture with `--dry-run`,
+`--only`, `--pilot-steps` and `--resume`.
 
 Source URLs, filenames, licensing cards, and the official GCS schema were checked
 via web retrieval. This sandbox cannot connect to those download hosts through
