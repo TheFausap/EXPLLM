@@ -5,7 +5,7 @@ from pathlib import Path
 import torch
 
 from qalf.data import DialogueExample, build_tokenizer, encode_examples, make_windows, relation_counts
-from qalf.model import QALFConfig, QALFModel, component_diversity_loss, load_checkpoint, save_checkpoint
+from qalf.model import QALFConfig, QALFModel, component_diversity_loss, device_for_training, load_checkpoint, resolve_device, save_checkpoint
 from qalf.state import is_hermitian, trace_real
 
 
@@ -140,6 +140,50 @@ class QALFInvariantTests(unittest.TestCase):
             a = self.model.generate(self.tokenizer, "What is QALF?", seed=3)
             b = loaded.generate(tokenizer, "What is QALF?", seed=3)
             self.assertEqual(a, b)
+
+
+class DeviceSelectionTests(unittest.TestCase):
+    def test_auto_prefers_cuda_when_available(self):
+        expected = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.assertEqual(resolve_device("auto"), expected)
+        self.assertEqual(device_for_training("auto"), expected)
+
+    def test_cpu_is_always_accepted(self):
+        self.assertEqual(resolve_device("cpu"), torch.device("cpu"))
+        self.assertEqual(device_for_training("cpu"), torch.device("cpu"))
+
+    def test_unsupported_or_malformed_devices_raise_value_error(self):
+        for bad in ("gpu", "tpu:0", "mps", "cuda:", "", "nonsense"):
+            with self.assertRaises(ValueError):
+                resolve_device(bad)
+            with self.assertRaises(ValueError):
+                device_for_training(bad)
+
+    def test_cuda_unavailable_raises_value_error(self):
+        if torch.cuda.is_available():
+            self.skipTest("CUDA is available")
+        for requested in ("cuda", "cuda:0", "cuda:1"):
+            with self.assertRaises(ValueError):
+                resolve_device(requested)
+            with self.assertRaises(ValueError):
+                device_for_training(requested)
+
+    def test_cuda_ordinal_out_of_range_raises_value_error(self):
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA is not available")
+        out_of_range = f"cuda:{torch.cuda.device_count()}"
+        with self.assertRaises(ValueError):
+            resolve_device(out_of_range)
+
+    def test_resolve_device_has_no_side_effects(self):
+        # Selecting a secondary device (e.g. --bigram-device) must not switch
+        # the current CUDA device away from the primary training device.
+        if not torch.cuda.is_available() or torch.cuda.device_count() < 2:
+            self.skipTest("requires at least two visible CUDA devices")
+        primary = device_for_training("cuda:0")
+        secondary = resolve_device("cuda:1")
+        self.assertEqual(secondary, torch.device("cuda:1"))
+        self.assertEqual(torch.cuda.current_device(), primary.index)
 
 
 if __name__ == "__main__":

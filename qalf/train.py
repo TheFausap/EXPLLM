@@ -14,7 +14,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from qalf.data import build_tokenizer, encode_examples, make_windows, read_jsonl, relation_counts, trigram_counts
 from qalf.joblog import JobLogger
-from qalf.model import QALFConfig, QALFModel, cross_entropy_with_l2, device_for_training, load_checkpoint, save_checkpoint
+from qalf.model import QALFConfig, QALFModel, cross_entropy_with_l2, device_for_training, load_checkpoint, resolve_device, save_checkpoint
 
 
 def parse_args() -> argparse.Namespace:
@@ -191,7 +191,7 @@ def main() -> None:
     trigram_gb = sum(t.numel() * t.element_size() for t in trigram.values()) / (1024 ** 3)
     logger.emit({"stage": "build_higher_order_memory", "trigram_contexts": int(trigram["keys"].numel()), "trigram_top_k": args.trigram_top_k, "bigram_gb": bigram_gb, "trigram_gb": trigram_gb})
     device = device_for_training(args.device)
-    bigram_device = torch.device(args.bigram_device) if args.bigram_device else device
+    bigram_device = resolve_device(args.bigram_device) if args.bigram_device else device
     logger.emit({
         "stage": "init_model",
         "device": str(device),

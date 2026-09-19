@@ -551,10 +551,44 @@ def load_checkpoint(path: str | Path, map_location: str | torch.device = "cpu") 
     return model, tokenizer, payload.get("metadata", {})
 
 
-def device_for_training(requested: str = "auto") -> torch.device:
+def resolve_device(requested: str = "auto") -> torch.device:
+    """Resolve a device request to a validated torch.device.
+
+    Accepts "auto" (CUDA when available, CPU otherwise), "cpu", "cuda", or
+    "cuda:N". Fails fast with a clear ValueError for unsupported device
+    strings, unavailable CUDA, and out-of-range CUDA ordinals. Has no side
+    effects, so it is safe for secondary devices such as --bigram-device.
+    """
     if requested == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return torch.device(requested)
+        requested = "cuda" if torch.cuda.is_available() else "cpu"
+    try:
+        device = torch.device(requested)
+    except RuntimeError as exc:
+        raise ValueError("Supported devices: auto, cpu, cuda, cuda:N") from exc
+    if device.type not in {"cpu", "cuda"}:
+        raise ValueError("Supported devices: auto, cpu, cuda, cuda:N")
+    if device.type == "cuda":
+        if not torch.cuda.is_available():
+            raise ValueError("CUDA device requested but CUDA is not available")
+        if device.index is not None and device.index >= torch.cuda.device_count():
+            visible = torch.cuda.device_count()
+            raise ValueError(
+                f"CUDA device {requested!r} not found; only {visible} CUDA device(s) visible"
+            )
+    return device
+
+
+def device_for_training(requested: str = "auto") -> torch.device:
+    """Resolve the primary training device.
+
+    In addition to resolve_device's validation, selecting a CUDA device makes
+    it the current device so CUDA-scoped state (RNG, allocator, current-device
+    queries) follows the selection instead of defaulting to cuda:0.
+    """
+    device = resolve_device(requested)
+    if device.type == "cuda":
+        torch.cuda.set_device(device)
+    return device
 
 
 def component_overlap_matrix(components: torch.Tensor) -> torch.Tensor:
