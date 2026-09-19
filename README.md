@@ -26,7 +26,13 @@ conda run -n EXPLLM python -m unittest discover -s tests
 ```
 
 QALF uses CUDA automatically when `torch.cuda.is_available()` succeeds and falls
-back to CPU otherwise.
+back to CPU otherwise. `--device` accepts `auto`, `cpu`, `cuda`, or `cuda:N` and
+is validated up front: unsupported strings, unavailable CUDA, or an out-of-range
+GPU index raise a clear error before training starts instead of failing deep
+inside a `.to()` call. Selecting `cuda:N` also makes that GPU the current CUDA
+device so RNG and allocator state follow the selection. The secondary
+`--bigram-device` argument uses the same validation but does not switch the
+current device.
 
 ## Larger Dataset
 

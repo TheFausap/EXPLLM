@@ -253,7 +253,9 @@ python -m griffin_memory.train \
 ```
 
 Use FP16 plus automatic loss scaling on GPUs without BF16; FP32 works on CPU or
-CUDA. `--device auto` selects CUDA if available. Reduce batch size first on OOM,
+CUDA. `--device auto` selects CUDA if available; it accepts `cpu`, `cuda`, or
+`cuda:N` and rejects unsupported strings, unavailable CUDA, or an out-of-range
+GPU index with a clear error before training starts. Reduce batch size first on OOM,
 then model dimensions, chunk/window size, or memory capacity. Training ends at
 **whichever comes first**: `max_steps` attempted updates or `epochs` full passes.
 Make `epochs` large enough for your intended token budget.

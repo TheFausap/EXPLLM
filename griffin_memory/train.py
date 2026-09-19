@@ -25,12 +25,18 @@ DEFAULTS = dict(batch_size=2, accumulation_steps=1, max_steps=1000, epochs=1,
 def choose_device(name):
     if name == "auto":
         name = "cuda" if torch.cuda.is_available() else "cpu"
-    device = torch.device(name)
+    try:
+        device = torch.device(name)
+    except RuntimeError as exc:
+        raise ValueError("Supported devices: cpu, cuda, cuda:N, auto") from exc
     if device.type not in {"cpu", "cuda"}:
         raise ValueError("Supported devices: cpu, cuda, cuda:N, auto")
     if device.type == "cuda":
         if not torch.cuda.is_available():
             raise ValueError("CUDA requested but unavailable")
+        if device.index is not None and device.index >= torch.cuda.device_count():
+            visible = torch.cuda.device_count()
+            raise ValueError(f"CUDA device {name} not found; only {visible} CUDA device(s) visible")
         torch.cuda.set_device(device)
     return device
 

@@ -12,7 +12,7 @@ import torch
 from griffin_memory.data import Cursor, DocumentDataset, DocumentStream, dataset_manifest
 from griffin_memory.prepare import prepare
 from griffin_memory.tokenizer import BOS, EOS, Tokenizer
-from griffin_memory.train import evaluate, load_checkpoint, parser, train
+from griffin_memory.train import choose_device, evaluate, load_checkpoint, parser, train
 from griffin_memory.config import ModelConfig
 from griffin_memory.model import GriffinMemoryLM, StreamState
 
@@ -144,6 +144,33 @@ class TrainingTests(unittest.TestCase):
         checkpoint = load_checkpoint(self.root / "partial/last.pt")
         self.assertIsNone(checkpoint["stream_state"])
         self.assertEqual(checkpoint["cursor"]["epoch"], 1)
+
+
+class DeviceSelectionTests(unittest.TestCase):
+    def test_auto_prefers_cuda_when_available(self):
+        expected = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.assertEqual(choose_device("auto"), expected)
+
+    def test_cpu_is_always_accepted(self):
+        self.assertEqual(choose_device("cpu"), torch.device("cpu"))
+
+    def test_unsupported_or_malformed_devices_raise_value_error(self):
+        for bad in ("gpu", "tpu:0", "mps", "cuda:", "", "nonsense"):
+            with self.assertRaises(ValueError):
+                choose_device(bad)
+
+    def test_cuda_unavailable_raises_value_error(self):
+        if torch.cuda.is_available():
+            self.skipTest("CUDA is available")
+        for requested in ("cuda", "cuda:0", "cuda:1"):
+            with self.assertRaises(ValueError):
+                choose_device(requested)
+
+    def test_cuda_ordinal_out_of_range_raises_value_error(self):
+        if not torch.cuda.is_available():
+            self.skipTest("CUDA is not available")
+        with self.assertRaises(ValueError):
+            choose_device(f"cuda:{torch.cuda.device_count()}")
 
 
 if __name__ == "__main__":
