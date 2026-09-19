@@ -1,0 +1,16 @@
+{
+  "d_model": 32,
+  "n_layers": 2,
+  "n_heads": 4,
+  "recurrent_dim": 32,
+  "mlp_dim": 64,
+  "conv_kernel": 4,
+  "window_size": 16,
+  "chunk_size": 32,
+  "memory_capacity": 16,
+  "memory_top_k": 4,
+  "memory_key_dim": 16,
+  "lsh_tables": 4,
+  "lsh_bits": 4,
+  "memory_backend": "lsh"
+}
