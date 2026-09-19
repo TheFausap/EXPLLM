@@ -1,5 +1,10 @@
 # QALF: Quantum Associative Language Field
 
+> **Separate architecture experiment:** [`griffin_memory/`](griffin_memory/README.md)
+> implements the uploaded Griffin-style decoder and three-tier memory diagram,
+> with from-scratch training, data preparation, generation, and full-state resume.
+> It is independent of the QALF implementation described below.
+
 QALF is a small proof-of-concept language model that uses complex Hilbert-space
 states, density-matrix context, entangled relation operators, and Born-style
 decoding. It is intentionally not a transformer, RNN, SSM, or wrapper around

@@ -1,0 +1,4 @@
+torch>=2.5,<3
+numpy>=1.26,<3
+# Optional, only needed for --tokenizer bpe:
+# tokenizers>=0.20,<1

@@ -1,0 +1,4 @@
+# Install alongside a working platform-specific PyTorch. Do not replace Spark's torch build.
+numpy>=1.26,<3
+tokenizers>=0.20,<1
+huggingface-hub>=0.27,<2
